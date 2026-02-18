@@ -7,6 +7,8 @@ import { Queries } from '../db/queries';
 import { searchDevelopersInputSchema } from '../schemas/mcp';
 import { executeSearch } from '../search/query-parser';
 import type { Env } from '../types/env';
+import { developers } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -102,6 +104,36 @@ router.post('/admin/classify', (c) => {
     status: 'ok',
     message: 'Classification runs via Durable Object queue',
   });
+});
+
+// ── POST /admin/reindex ───────────────────────────────────────────────────────
+// Kicks off classification + scoring + Vectorize builds without any GitHub calls.
+//
+// Body:
+//   { developerId?: string }
+// If omitted, queues work for all developers currently in D1.
+
+router.post('/admin/reindex', async (c) => {
+  let body: { developerId?: string } = {};
+  try {
+    body = await c.req.json<{ developerId?: string }>();
+  } catch {
+    body = {};
+  }
+
+  if (body.developerId) {
+    await c.env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId: body.developerId });
+    return c.json({ status: 'queued', developerId: body.developerId });
+  }
+
+  const db = createDB(c.env.DB);
+  const ids = await db.select({ id: developers.id }).from(developers).where(eq(developers.optedOut, false)).all();
+
+  for (const row of ids) {
+    await c.env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId: row.id });
+  }
+
+  return c.json({ status: 'queued', developers: ids.length });
 });
 
 // ── GET /admin/search ─────────────────────────────────────────────────────────

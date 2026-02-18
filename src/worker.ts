@@ -14,6 +14,10 @@ import { router } from './api/router';
 import type { Env } from './types/env';
 import { queueMessageSchema } from './schemas/queue';
 import { analyzeRepo, analyzeReviews } from './ingestion/pipeline';
+import { buildVectorsForDeveloper, classifyDeveloperContributions, computeScoresForDeveloper } from './scoring/pipeline';
+import { createDB } from './db/client';
+import { developers } from './db/schema';
+import { eq } from 'drizzle-orm';
 
 // Re-export Durable Object classes so Cloudflare binds them.
 export { DeveloperIngestion } from './ingestion/durable-object';
@@ -72,13 +76,38 @@ export default {
         } else if (payload.type === 'analyze_reviews') {
           // Long-running: run directly in Worker.
           await analyzeReviews(env, payload.developerId, payload.repoFullName, payload.prNumbers);
+        } else if (payload.type === 'compute_scores') {
+          const developerId = payload.developerId;
+
+          if (developerId === 'all') {
+            const db = createDB(env.DB);
+            const ids = await db.select({ id: developers.id }).from(developers).where(eq(developers.optedOut, false)).all();
+            for (const row of ids) {
+              await env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId: row.id });
+            }
+            message.ack();
+            continue;
+          }
+
+          // 1) Classify contributions (domains + coarse type)
+          // Run in small batches; if more remain, requeue and return.
+          const { remainingLikely } = await classifyDeveloperContributions(env, developerId);
+          if (remainingLikely) {
+            await env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId }, { delaySeconds: 2 });
+            message.ack();
+            continue;
+          }
+
+          // 2) Compute developer + domain scores
+          await computeScoresForDeveloper(env, developerId);
+
+          // 3) Build vectors
+          await env.INGESTION_QUEUE.send({ type: 'build_vectors', developerId });
+        } else if (payload.type === 'build_vectors') {
+          await buildVectorsForDeveloper(env, payload.developerId);
         } else {
-          // Short-lived stateful ops (ingest_developer, compute_scores, build_vectors)
-          // → Durable Object.
-          const doName = payload.type === 'ingest_developer'
-            ? payload.username
-            : payload.developerId;
-          const stub = env.INGESTION_DO.get(env.INGESTION_DO.idFromName(doName));
+          // ingest_developer → Durable Object.
+          const stub = env.INGESTION_DO.get(env.INGESTION_DO.idFromName(payload.username));
           await stub.fetch('http://do/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -114,16 +143,8 @@ export default {
 
     ctx.waitUntil(
       (async () => {
-        // Trigger compute_scores via the cron-trigger DO shard.
-        const id = env.INGESTION_DO.idFromName('cron-trigger');
-        const stub = env.INGESTION_DO.get(id);
-
         try {
-          await stub.fetch('http://do/process', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'compute_scores', developerId: 'all' }),
-          });
+          await env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId: 'all' });
         } catch (err) {
           console.error('[scheduled] Failed to trigger scoring pipeline:', err);
         }

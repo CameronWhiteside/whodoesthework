@@ -4,7 +4,7 @@ import { searchDevelopersByDomain } from './vector-store';
 import type { Env } from '../types/env';
 import { createDB } from '../db/client';
 import { developers } from '../db/schema';
-import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 
 export async function executeSearch(
   env: Env,
@@ -16,7 +16,24 @@ export async function executeSearch(
     env.AI, env.VECTOR_INDEX, searchText, (input.limit ?? 10) * 5 // over-fetch for filtering
   );
 
-  if (vectorResults.length === 0) return [];
+  // If the vector index is empty (or not built yet), fall back to a simple
+  // top-scored list so the demo remains usable while the pipeline catches up.
+  if (vectorResults.length === 0) {
+    const db = createDB(env.DB);
+    const rows = await db
+      .select({ id: developers.id })
+      .from(developers)
+      .where(and(
+        eq(developers.optedOut, false),
+        eq(developers.ingestionStatus, 'complete'),
+        isNotNull(developers.overallImpact),
+      ))
+      .orderBy(desc(developers.overallImpact))
+      .limit(input.limit ?? 10)
+      .all();
+
+    return rows.map((r, i) => ({ developerId: r.id, similarity: 1 - i * 0.01 }));
+  }
 
   const db = createDB(env.DB);
   const candidateIds = vectorResults.map(r => r.developerId);
@@ -44,7 +61,7 @@ export async function executeSearch(
     .select({ id: developers.id, overallImpact: developers.overallImpact })
     .from(developers)
     .where(and(...conditions))
-    .orderBy(developers.overallImpact)
+    .orderBy(desc(developers.overallImpact))
     .limit(input.limit ?? 10)
     .all();
 
