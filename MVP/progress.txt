@@ -3,7 +3,7 @@
 # Update this file whenever you START or COMPLETE a spec.
 # Agents running in parallel: check here before starting to avoid duplicate work.
 
-Last updated: 2026-02-18 (spec-09 Part B complete)
+Last updated: 2026-02-18 (spec-10 DATA-FIX complete)
 
 ## Legend
   ✅ COMPLETE     — done, TypeScript compiles, tests/spot checks pass
@@ -208,6 +208,39 @@ Note: src/api/router.ts created by spec-08 agent.
       All routes use light/editorial design tokens (#f5f2ed bg, #b8ff57 CTAs, #ede9fe lavender chips).
       API calls use searchMatches() and getDeveloper() from ui/src/lib/api.ts (correct function names).
       ShortlistStore.load() omitted — store self-initializes from localStorage on module load.
+
+### spec-10 — DATA-FIX: Full Data Pipeline Repair
+Status:   ✅ COMPLETE
+Started:  2026-02-18
+Completed: 2026-02-18
+Spec:     MVP/spec-10-data-fix.md
+Files modified:
+  src/db/schema.ts                    ← +4 ingestion lifecycle columns
+  migrations/0001_brief_snowbird.sql  ← drizzle-kit generated migration (apply before deploy)
+  src/db/queries.ts                   ← fixed status semantics; new setIngestionInProgress/
+                                         markIngestionComplete/setIngestionFailed/resetToPending/
+                                         meetsCompletenessThreshold; upsertRepo non-clobber fix
+  src/ingestion/github-client.ts      ← getUserPublic (unauthenticated fallback); 403 classification
+                                         (GITHUB_RATE_LIMIT / GITHUB_SECONDARY_RATE_LIMIT /
+                                         GITHUB_SSO_REQUIRED / GITHUB_FORBIDDEN); isRateLimitError export
+  src/ingestion/durable-object.ts     ← getUserPublic fallback on rate-limit; repos=0 → failed
+                                         (not complete); onRepoComplete only queues compute_scores
+  src/ingestion/pipeline.ts           ← fixed `since` selection (never use lastIngestedAt if it
+                                         predates ingestionStartedAt); fetchPatchFallback for
+                                         commit detail (PATCH_FALLBACK_USED / PATCH_FALLBACK_FAILED)
+  src/scoring/pipeline.ts             ← completeness gate before Vectorize upsert
+  src/worker.ts                       ← build_vectors safety net: markIngestionComplete after vectors built
+  src/api/router.ts                   ← POST /admin/unstick (Bucket A flip + Bucket B requeue);
+                                         POST /admin/repair-broken-complete (?dry_run=true);
+                                         /api/search completeness filter (overall_impact > 0)
+Note: tsc --noEmit passes with zero errors.
+HUMAN ACTION REQUIRED before deploy:
+  1. npx wrangler d1 migrations apply wdtw-db --remote
+     (runs 0001_brief_snowbird.sql — adds 4 columns to developers table)
+  2. npx wrangler deploy
+  3. curl -X POST https://<worker-url>/admin/unstick   ← heals the 51 stuck developers
+  4. (optional) curl -X POST https://<worker-url>/admin/repair-broken-complete?dry_run=true
+     then without dry_run if any broken-complete are found
 
 ================================================================
 ## CRITICAL RULES (for all agents)

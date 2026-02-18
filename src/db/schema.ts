@@ -22,6 +22,11 @@ export const developers = sqliteTable('developers', {
   recentActivityScore: real('recent_activity_score'),
   scoreVersion: text('score_version'),
   scoredAt: text('scored_at'),
+  // Ingestion lifecycle tracking (DATA-FIX spec-10)
+  ingestionStartedAt: text('ingestion_started_at'),         // set on in_progress; NOT used as commit `since`
+  ingestionFailureReason: text('ingestion_failure_reason'), // machine-readable: GITHUB_RATE_LIMIT, LEGIT_EMPTY, etc.
+  ingestionLastError: text('ingestion_last_error'),         // truncated human-readable message
+  ingestionAttemptCount: integer('ingestion_attempt_count').default(0),
 }, (t) => [
   index('idx_developers_username').on(t.username),
   index('idx_developers_status').on(t.ingestionStatus),

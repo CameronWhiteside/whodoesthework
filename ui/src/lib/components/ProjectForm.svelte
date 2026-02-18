@@ -18,11 +18,8 @@
   // Languages are fixed — these are well-known and don't change.
   const LANGUAGES = [
     'Rust', 'Go', 'TypeScript', 'Python', 'Java', 'C++', 'C#', 'Ruby',
-    'Scala', 'Kotlin', 'Swift', 'Elixir', 'Haskell', 'Zig',
+    'Scala', 'Kotlin', 'Swift', 'Elixir', 'Haskell',
     'React', 'Next.js', 'SvelteKit', 'Vue', 'Node.js', 'PostgreSQL',
-    'Cloudflare', 'Durable Objects', 'Queues', 'D1',
-    'Vector search', 'Semantic search', 'AI Agents', 'MCP',
-    'Observability',
   ];
 
   // Domain chips are loaded from GET /api/domains — only shows domains with
@@ -392,11 +389,11 @@
   .cardlist {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-3);
+    gap: var(--sp-2);
     margin-top: var(--sp-3);
     overflow: auto;
     padding-right: 0.25rem;
-    max-height: min(420px, 46vh);
+    max-height: min(520px, 58vh);
   }
 
   .error-title {

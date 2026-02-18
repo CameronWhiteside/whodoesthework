@@ -1,9 +1,50 @@
 # whodoesthe.work
 
-Developer intelligence platform. Analyzes GitHub contribution history to produce multi-dimensional quality scores and exposes semantic search — both through a demo UI and an MCP server for AI agents.
+Developer intelligence platform. Analyzes GitHub contribution history to produce multi-dimensional quality scores and exposes semantic search — through a demo UI and an open MCP server for AI agents.
 
 **Live:** https://whodoesthe.work
 **Stack:** Cloudflare Workers · D1 · Vectorize · Durable Objects · Queues · Workers AI · SvelteKit
+
+---
+
+## Current state
+
+**What's working:**
+
+- ~48 developers fully indexed, scoring pipeline running end-to-end
+- 6-dimension scoring model (code quality, review quality, docs, collaboration, consistency, recency) with per-contribution SEU/EffortH/QualityH math
+- Workers AI classification on every commit (feature/bugfix/refactor/test/docs/etc) and domain tagging
+- Vectorize semantic search with cosine similarity + SQL score filters
+- MCP server open at `/mcp` — `search_developers`, `get_developer_profile`, `compare_developers` all working
+- One-pager UI: inline search form, live stats from the real index, pipeline explainer, domain chips, MCP teaser
+- 81 unit tests across the pure-function scoring + analysis modules
+
+**What was cut to keep the demo tight:**
+
+- **Shortlist** — removed. Was localStorage-backed, no server state. Not worth the UI surface area right now.
+- **MCP auth** — removed. Had a full constant-time Bearer token implementation, but there's no key registration flow, so it was gating the demo for no actual security benefit. MCP endpoint is now fully open.
+
+**Learning pain points so far:**
+
+- **`@cloudflare/agents` version instability** — v0.0.16 exports `Agent`, not `McpAgent`. The SDK naming changed mid-development and the MCP SDK docs lag. The pattern (extend `Agent`, wire up `McpServer` + `WebStandardStreamableHTTPServerTransport` manually per request) is not what the current docs describe. Keep the version pinned.
+
+- **Durable Objects + Queues interaction** — idempotency is your problem, not the platform's. If a queue message is redelivered, your DO handler must be safe to re-run. This took a debugging session to discover; the queue silently retries on handler throws.
+
+- **SvelteKit adapter-static + Cloudflare Pages serving** — the worker serves the SvelteKit static build via `env.ASSETS`. Works fine, but the integration between `adapter-static` output and Cloudflare's asset routing required some mental model work. The `.svelte-kit/` and `ui/build/` directories should be gitignored (they weren't initially).
+
+- **Workers AI cold classification latency** — first Workers AI call in a request has noticeable warm-up. Solved with `Promise.all()` for parallel classification, but sequential AI calls in the pipeline are a real bottleneck worth watching.
+
+- **Vitest + Workers TypeScript config** — the main `tsconfig.json` uses `"moduleResolution": "bundler"` and `"types": ["@cloudflare/workers-types"]`. Vitest handles this fine since it uses Vite under the hood, but the CF global types (`Request`, `Response`, etc.) conflict in subtle ways if you ever try to test Worker-specific code directly. For now tests only cover pure functions — keep it that way until `@cloudflare/vitest-pool-workers` is more stable.
+
+**What to build next:**
+
+1. **Expand the index** — 48 developers is enough to demo but thin for real search quality. Automated discovery from popular repos + scheduled re-ingestion would get this to 500+.
+2. **Scheduled re-scoring cron** — the wrangler.jsonc hook is ready, just needs a `[triggers]` cron. Re-scores existing developers nightly so scores stay current.
+3. **Search quality tuning** — query expansion via Workers AI is implemented but the prompt could be tighter. Some searches return weak matches because the embedding of a 2-sentence description doesn't cover the full technical vocabulary.
+4. **Profile comparison UI** — `compare_developers` MCP tool exists, no UI for it yet. A side-by-side score comparison page would be a natural next step.
+5. **Basic rate limiting on MCP** — it's fully open right now which is fine for demo. For production, even a simple `GITHUB_TOKEN`-gated or IP-rate-limited layer would be enough.
+6. **Ingestion progress UI** — the pipeline status (`in_progress`, `pending`, etc.) is in D1 but the developer profile page just shows a spinner. Real-time progress ("analyzing repo 4 of 12") via polling would make the architecture much more legible during a demo.
+7. **Test coverage expansion** — the 81 tests cover the math but nothing touches the HTTP layer (Hono router), the ingestion DO logic, or the MCP tools. Integration tests against a local D1 instance would catch regressions in the query layer.
 
 ---
 
@@ -101,19 +142,38 @@ ui/                          SvelteKit frontend (CSR-only, adapter-static)
       api.ts                 Fetch helpers + response types
       stores/
         SearchStore.ts       Form state across navigation
-        ShortlistStore.ts    localStorage shortlist
     routes/
-      +page.svelte           Landing
-      search/+page.svelte    3-step search form
-      matches/+page.svelte   Results grid
+      +page.svelte           One-pager: hero, inline search, pipeline, live stats, MCP teaser
+      search/+page.svelte    Search form (alias/fallback for /#find)
+      matches/+page.svelte   Results grid with MatchCards
       developer/[u]/+page.svelte  Profile deep-dive
-      shortlist/+page.svelte Saved developers
+      mcp/+page.svelte       Redirects to /#mcp section
 
 scripts/
   seed-index.sh              Bulk ingest: specific users + contributor discovery
 
 migrations/                  Drizzle-generated D1 SQL migrations
 ```
+
+---
+
+## Testing
+
+```bash
+npm test          # run once
+npm run test:watch  # watch mode
+```
+
+81 tests, ~130ms. Covers the pure-function scoring and analysis layer:
+
+| File | Tests | What |
+|---|---|---|
+| `src/analysis/complexity.test.ts` | 17 | Shannon entropy, test correlation, complexity delta |
+| `src/analysis/diff-parser.test.ts` | 10 | Patch parsing, decision point counting |
+| `src/analysis/file-classifier.test.ts` | 28 | File category classification, priority ordering |
+| `src/scoring/quality-score.test.ts` | 26 | SEU formula, centrality thresholds, QualityH bounds, recency decay |
+
+The HTTP layer (Hono router, ingestion DO, MCP tools) is not covered by tests yet. That's the obvious gap.
 
 ---
 
@@ -225,7 +285,7 @@ All admin endpoints are unauthenticated — intended for local use / curl.
 ### MCP
 
 ```
-/mcp   — MCP over HTTP (JSON-RPC)
+/mcp   — MCP over HTTP (JSON-RPC), open — no auth required
 /sse   — MCP over SSE
 ```
 
@@ -252,7 +312,7 @@ watch -n 30 'curl -s https://whodoesthe.work/admin/stats'
 
 ### Lazy (triggered by UI)
 
-When the SvelteKit app visits `/api/developers/:username` for a user not yet in D1, the worker kicks off ingestion in the background (`c.executionCtx.waitUntil`). The endpoint returns `{ ingestionStatus: 'pending' }` until indexing completes.
+When the app visits `/api/developers/:username` for a user not yet in D1, the worker kicks off ingestion in the background (`c.executionCtx.waitUntil`). Returns `{ ingestionStatus: 'pending' }` until indexing completes.
 
 ### Bulk seeding
 
@@ -264,8 +324,6 @@ GITHUB_TOKEN=ghp_... ./scripts/seed-index.sh
 GITHUB_TOKEN=ghp_... API_URL=https://whodoesthe.work ./scripts/seed-index.sh
 ```
 
-The script queues all users, then polls `/admin/stats` every 30 seconds. Ctrl+C to stop watching.
-
 ### Scheduled (cron — not yet configured)
 
 Add a `[triggers]` cron to `wrangler.jsonc` to periodically re-classify and re-score already-ingested developers:
@@ -276,11 +334,7 @@ Add a `[triggers]` cron to `wrangler.jsonc` to periodically re-classify and re-s
 }
 ```
 
-The scheduled handler fires `compute_scores` for all developers. This keeps scores current as the AI models or scoring weights change.
-
 ### Ingestion lifecycle
-
-A developer moves through these statuses in `developers.ingestionStatus`:
 
 ```
 pending → in_progress → complete
@@ -291,8 +345,6 @@ pending → in_progress → complete
 - `in_progress`: actively fetching commits / PRs / running analysis
 - `complete`: all repos analyzed, scores computed, vector indexed — shows up in search
 - `error`: something failed (check Worker logs in Cloudflare dashboard)
-
-Scoring (`overallImpact`, etc.) is null until the pipeline completes. Search only returns developers with `ingestionStatus = 'complete'`.
 
 ---
 
@@ -320,42 +372,24 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Wrangler reads `.dev.vars` automatically in local dev. Never commit it.
-
 ### Build and deploy
 
 ```bash
-# Build UI + deploy worker
-npm run deploy
-
-# Build UI only
-npm run build
-
-# Type check
-npm run typecheck
+npm run deploy    # build UI + deploy worker
+npm run build     # build UI only
+npm run typecheck # TypeScript check
+npm test          # run test suite
 ```
 
-### Production secrets
+### Secrets
 
-Secrets are set once via wrangler and stored encrypted in Cloudflare — never in files:
+Only one secret needed:
 
 ```bash
 npx wrangler secret put GITHUB_TOKEN
-
-# Verify
-npx wrangler secret list
 ```
 
----
-
-## Secrets and env
-
-| Name | Where | Description |
-|---|---|---|
-| `GITHUB_TOKEN` | Cloudflare secret | PAT with `read:user`, `public_repo` scopes. Used by ingestion to fetch commits and PRs. |
-| `ENVIRONMENT` | `wrangler.jsonc` vars | `production` — non-secret config. |
-
-Never put secret values in `wrangler.jsonc`. The `vars` section is for non-secret config only.
+The `ENVIRONMENT` var is non-secret and lives in `wrangler.jsonc`. Never put secrets there.
 
 ---
 
@@ -366,9 +400,9 @@ All coefficients are in `src/shared/constants.ts`. Change a value, redeploy, re-
 Key knobs:
 
 - `RECENCY_LAMBDA` — how fast old contributions decay (higher = more recency bias)
-- `SEU_ENTROPY_COEFF` — how much code structural complexity boosts a score
+- `SEU_ENTROPY_COEFF` — how much code spread (cross-file changes) boosts a score
 - `EFFORH_CENTRALITY_COEFF` — how much contributing to popular/central repos is rewarded
-- `CODE_QUALITY_REF` — the "reference" developer value used to calibrate the 0–100 scale
+- `CODE_QUALITY_REF` — the "reference" value for calibrating the 0–100 scale
 - Dimension weights in `SCORE_WEIGHTS` — rebalance the 6-dimension overall score
 
 ---
@@ -377,16 +411,13 @@ Key knobs:
 
 Worker logs are enabled (`observability.logs.enabled: true`, `invocation_logs: true`). View in the Cloudflare dashboard under **Workers → wdtw → Logs**.
 
-Useful for:
-- Watching ingestion progress per developer
-- Seeing Workers AI classification calls
-- Debugging queue failures / DO errors
+Useful for watching ingestion progress, AI classification calls, and queue failures.
 
 ---
 
 ## MCP integration
 
-Connect any MCP-compatible client (Claude Desktop, Cursor, etc.):
+Connect any MCP-compatible client:
 
 ```json
 {
@@ -397,6 +428,8 @@ Connect any MCP-compatible client (Claude Desktop, Cursor, etc.):
   }
 }
 ```
+
+No auth required. Works with Claude Desktop, Cursor, or any MCP-compatible client.
 
 Available tools:
 - `search_developers` — semantic search with optional domain/score/recency filters

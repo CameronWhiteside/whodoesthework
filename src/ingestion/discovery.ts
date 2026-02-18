@@ -5,8 +5,8 @@ import type { GitHubRepo } from '../schemas/github';
 import type { GitHubClient } from './github-client';
 import { shouldIngestRepo } from './repo-filter';
 
-const MAX_OWN_REPO_PAGES = 3;
-const MAX_OWN_REPOS = 20;
+const MAX_OWN_REPO_PAGES = 5;
+const MAX_OWN_REPOS = 30;
 
 /**
  * Find repos where the developer has commits (their own repos only for now).
@@ -48,17 +48,53 @@ export interface DiscoveryQuery {
 }
 
 // Maps domain keywords to GitHub search terms / topics.
+// Expanded to 30 domains to drive broader developer discovery.
 const DOMAIN_SEARCH_TERMS: Record<string, string[]> = {
-  'distributed-systems': ['distributed-systems', 'raft', 'consensus', 'paxos', 'distributed'],
-  'networking': ['networking', 'tcp', 'http', 'grpc', 'protocol'],
-  'databases': ['database', 'sql', 'nosql', 'storage-engine', 'query-engine'],
-  'frontend-react': ['react', 'nextjs', 'react-hooks', 'react-components'],
-  'ml-infrastructure': ['machine-learning', 'mlops', 'ml-pipeline', 'feature-store'],
-  'fintech': ['fintech', 'payments', 'banking', 'trading'],
-  'kubernetes': ['kubernetes', 'k8s', 'operator', 'controller'],
-  'security': ['security', 'cryptography', 'authentication', 'zero-trust'],
-  'cli-tools': ['cli', 'command-line', 'terminal'],
-  'compiler-design': ['compiler', 'parser', 'ast', 'language-design'],
+  // ── Original 10 ───────────────────────────────────────────────────────────
+  'distributed-systems':  ['distributed-systems', 'raft', 'consensus', 'paxos'],
+  'networking':           ['networking', 'tcp', 'http2', 'grpc', 'protocol'],
+  'databases':            ['database', 'sql', 'storage-engine', 'query-engine', 'nosql'],
+  'frontend-react':       ['react', 'nextjs', 'react-hooks', 'react-components'],
+  'ml-infrastructure':    ['machine-learning', 'mlops', 'ml-pipeline', 'feature-store'],
+  'fintech':              ['fintech', 'payments', 'banking', 'trading-bot'],
+  'kubernetes':           ['kubernetes', 'k8s', 'operator', 'helm-chart'],
+  'security':             ['security', 'zero-trust', 'vulnerability', 'penetration-testing'],
+  'cli-tools':            ['cli', 'command-line', 'terminal', 'shell-script'],
+  'compiler-design':      ['compiler', 'parser', 'ast', 'language-design', 'bytecode'],
+
+  // ── Web & API ──────────────────────────────────────────────────────────────
+  'web-backend':          ['rest-api', 'web-server', 'microservices', 'backend-framework'],
+  'api-design':           ['graphql', 'openapi', 'api-gateway', 'websocket'],
+  'frontend-vue':         ['vuejs', 'nuxt', 'vue-components', 'vue3'],
+
+  // ── Infrastructure & DevOps ────────────────────────────────────────────────
+  'cloud-infrastructure': ['terraform', 'pulumi', 'aws-cdk', 'infrastructure-as-code'],
+  'devops':               ['ci-cd', 'github-actions', 'docker-compose', 'gitops'],
+  'observability':        ['opentelemetry', 'prometheus', 'distributed-tracing', 'grafana'],
+
+  // ── Data & AI ─────────────────────────────────────────────────────────────
+  'data-engineering':     ['data-pipeline', 'dbt', 'airflow', 'spark', 'etl'],
+  'llm-applications':     ['langchain', 'rag', 'llm', 'llm-agent', 'embeddings'],
+
+  // ── Developer Tooling ─────────────────────────────────────────────────────
+  'developer-tools':      ['developer-tools', 'linter', 'formatter', 'language-server', 'build-tool'],
+  'testing':              ['testing', 'test-automation', 'e2e-testing', 'property-based-testing'],
+  'open-source-tooling':  ['monorepo', 'package-manager', 'turborepo', 'bazel', 'nx'],
+
+  // ── Systems & Low-level ───────────────────────────────────────────────────
+  'systems-programming':  ['linux', 'kernel', 'memory-safety', 'low-level', 'systems'],
+  'embedded-systems':     ['embedded-systems', 'rtos', 'microcontroller', 'firmware'],
+  'webassembly':          ['webassembly', 'wasm', 'emscripten', 'wasi'],
+
+  // ── Mobile ────────────────────────────────────────────────────────────────
+  'mobile-ios':           ['swift', 'swiftui', 'ios', 'cocoa'],
+  'mobile-android':       ['android', 'jetpack-compose', 'android-library'],
+
+  // ── Domain Verticals ──────────────────────────────────────────────────────
+  'authentication':       ['authentication', 'oauth2', 'iam', 'passkeys', 'saml'],
+  'search':               ['elasticsearch', 'search-engine', 'vector-search', 'full-text-search'],
+  'game-development':     ['game-engine', 'godot', 'game-development', 'ecs'],
+  'blockchain':           ['ethereum', 'solidity', 'web3', 'smart-contract'],
 };
 
 /**

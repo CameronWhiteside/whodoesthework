@@ -9,6 +9,8 @@ import { executeSearch } from '../search/query-parser';
 import type { Env } from '../types/env';
 import { developers } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { GitHubClient } from '../ingestion/github-client';
+import { discoverDevelopers } from '../ingestion/discovery';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -96,6 +98,86 @@ router.get('/admin/stats', async (c) => {
   });
 });
 
+// ── POST /admin/discover ─────────────────────────────────────────────────────
+// Runs GitHub repo→contributor discovery for the given domains+languages,
+// deduplicates against already-indexed developers, and queues the new ones.
+//
+// Body (all optional):
+//   { domains?: string[], languages?: string[], minStars?: number, maxDevelopers?: number }
+// Defaults: all 30 domains, all languages, minStars=50, maxDevelopers=15 per domain batch.
+
+router.post('/admin/discover', async (c) => {
+  let body: { domains?: string[]; languages?: string[]; minStars?: number; maxDevelopers?: number } = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+
+  const ALL_DOMAINS = [
+    'distributed-systems','networking','databases','frontend-react','ml-infrastructure',
+    'fintech','kubernetes','security','cli-tools','compiler-design',
+    'web-backend','api-design','frontend-vue','cloud-infrastructure','devops',
+    'observability','data-engineering','llm-applications','developer-tools','testing',
+    'open-source-tooling','systems-programming','embedded-systems','webassembly',
+    'mobile-ios','mobile-android','authentication','search','game-development','blockchain',
+  ];
+
+  const domains    = body.domains    ?? ALL_DOMAINS;
+  const languages  = body.languages  ?? [];
+  const minStars   = body.minStars   ?? 50;
+  const maxPerBatch = body.maxDevelopers ?? 15;
+
+  const gh = new GitHubClient(c.env.GITHUB_TOKEN);
+  const db = createDB(c.env.DB);
+
+  // Load existing usernames so we don't re-queue already-indexed developers
+  const existingRows = await db.select({ username: developers.username }).from(developers).all();
+  const existingSet = new Set(existingRows.map((r) => r.username.toLowerCase()));
+
+  const discovered = new Set<string>();
+  const queued: string[] = [];
+
+  // Run discovery in batches of 3 domains to stay within rate limits
+  const BATCH = 3;
+  for (let i = 0; i < domains.length; i += BATCH) {
+    const domainBatch = domains.slice(i, i + BATCH);
+    try {
+      const usernames = await discoverDevelopers(gh, {
+        domains: domainBatch,
+        languages,
+        minStars,
+        maxDevelopers: maxPerBatch,
+      });
+      for (const username of usernames) {
+        discovered.add(username);
+      }
+    } catch (err) {
+      console.warn(`[discover] batch ${domainBatch.join(',')} failed:`, err);
+    }
+  }
+
+  // Queue new developers for ingestion
+  for (const username of discovered) {
+    if (existingSet.has(username.toLowerCase())) continue;
+    try {
+      const stub = c.env.INGESTION_DO.get(c.env.INGESTION_DO.idFromName(username));
+      await stub.fetch('http://do/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      queued.push(username);
+    } catch (err) {
+      console.warn(`[discover] failed to queue ${username}:`, err);
+    }
+  }
+
+  return c.json({
+    domains_searched: domains.length,
+    discovered: discovered.size,
+    already_indexed: discovered.size - queued.length,
+    queued: queued.length,
+    queued_usernames: queued,
+  });
+});
+
 // ── POST /admin/classify ─────────────────────────────────────────────────────
 // Placeholder — classification is driven by the Durable Object queue processor.
 
@@ -104,6 +186,118 @@ router.post('/admin/classify', (c) => {
     status: 'ok',
     message: 'Classification runs via Durable Object queue',
   });
+});
+
+// ── POST /admin/unstick ──────────────────────────────────────────────────────
+// Heals developers stuck in_progress after DO completion counter failure.
+//
+// Bucket A: in_progress + scored_at IS NOT NULL + overall_impact IS NOT NULL
+//           → flip to complete (scores are valid, just status was never updated)
+// Bucket B: in_progress + scored_at IS NOT NULL + overall_impact IS NULL
+//           → re-queue compute_scores (scores not yet written)
+//
+// Idempotent — safe to call multiple times. Only moves status forward.
+
+router.post('/admin/unstick', async (c) => {
+  // Bucket A: flip to complete
+  const bucketAResult = await c.env.DB.prepare(`
+    UPDATE developers
+    SET ingestion_status = 'complete',
+        last_ingested_at = datetime('now')
+    WHERE ingestion_status = 'in_progress'
+      AND scored_at IS NOT NULL
+      AND overall_impact IS NOT NULL
+  `).run();
+
+  // Bucket B: re-queue compute_scores
+  const bucketBRows = await c.env.DB.prepare(`
+    SELECT id FROM developers
+    WHERE ingestion_status = 'in_progress'
+      AND scored_at IS NOT NULL
+      AND overall_impact IS NULL
+  `).all<{ id: string }>();
+
+  const bucketBIds = bucketBRows.results ?? [];
+  for (const row of bucketBIds) {
+    await c.env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId: row.id });
+  }
+
+  return c.json({
+    bucket_a_fixed: bucketAResult.meta?.changes ?? 0,
+    bucket_b_requeued: bucketBIds.length,
+  });
+});
+
+// ── POST /admin/repair-broken-complete ───────────────────────────────────────
+// Resets developers that are complete but have zero contributions (Bucket C).
+// Use ?dry_run=true to preview without making changes.
+//
+// For each broken-complete developer:
+//  1. Deletes contributions, reviews, developer_domains rows
+//  2. Resets developer row to pending (clears scores + failure fields)
+//  3. Re-queues ingest_developer via INGESTION_DO
+
+router.post('/admin/repair-broken-complete', async (c) => {
+  const dryRun = c.req.query('dry_run') === 'true';
+
+  // raw SQL: identify broken-complete — complete status but zero contributions
+  const brokenRows = await c.env.DB.prepare(`
+    SELECT d.id, d.username
+    FROM developers d
+    LEFT JOIN contributions con ON con.developer_id = d.id
+    WHERE d.opted_out = 0
+      AND d.ingestion_status = 'complete'
+    GROUP BY d.id
+    HAVING COUNT(con.id) = 0
+    LIMIT 200
+  `).all<{ id: string; username: string }>();
+
+  const broken = brokenRows.results ?? [];
+
+  if (dryRun) {
+    return c.json({ dry_run: true, broken_complete_count: broken.length, developers: broken });
+  }
+
+  let repaired = 0;
+  for (const dev of broken) {
+    // 1. Delete dependent rows
+    await c.env.DB.prepare('DELETE FROM contributions WHERE developer_id = ?').bind(dev.id).run();
+    await c.env.DB.prepare('DELETE FROM reviews WHERE developer_id = ?').bind(dev.id).run();
+    await c.env.DB.prepare('DELETE FROM developer_domains WHERE developer_id = ?').bind(dev.id).run();
+
+    // 2. Reset developer row
+    await c.env.DB.prepare(`
+      UPDATE developers
+      SET ingestion_status = 'pending',
+          overall_impact = NULL,
+          code_quality = NULL,
+          review_quality = NULL,
+          documentation_quality = NULL,
+          collaboration_breadth = NULL,
+          consistency_score = NULL,
+          recent_activity_score = NULL,
+          scored_at = NULL,
+          score_version = NULL,
+          ingestion_failure_reason = NULL,
+          ingestion_last_error = NULL,
+          ingestion_started_at = NULL
+      WHERE id = ?
+    `).bind(dev.id).run();
+
+    // 3. Re-queue ingestion via INGESTION_DO
+    const stub = c.env.INGESTION_DO.get(c.env.INGESTION_DO.idFromName(dev.username));
+    await stub.fetch('http://do/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: dev.username }),
+    }).catch((err) => {
+      console.error(`[repair-broken-complete] Failed to queue ${dev.username}:`, err);
+    });
+
+    repaired++;
+  }
+
+  return c.json({ repaired, developers: broken.map((d) => d.username) });
 });
 
 // ── POST /admin/reindex ───────────────────────────────────────────────────────
@@ -177,8 +371,8 @@ router.post('/api/search', async (c) => {
 
   const ids = results.map((r) => r.developerId);
   const rows = await c.env.DB.prepare(
-    // raw SQL: fetch multiple developers by id in one query
-    `SELECT id, username, overall_impact, code_quality, review_quality FROM developers WHERE id IN (${ids.map(() => '?').join(',')})`,
+    // raw SQL: fetch multiple developers by id; gate on overall_impact > 0 to exclude empty profiles
+    `SELECT id, username, overall_impact, code_quality, review_quality FROM developers WHERE id IN (${ids.map(() => '?').join(',')}) AND overall_impact > 0`,
   ).bind(...ids).all<{ id: string; username: string; overall_impact: number | null; code_quality: number | null; review_quality: number | null }>();
 
   const byId = new Map((rows.results ?? []).map((r) => [r.id, r]));

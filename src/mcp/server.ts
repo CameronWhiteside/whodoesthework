@@ -1,15 +1,10 @@
 // src/mcp/server.ts
 //
-// MCP server implemented as a Cloudflare Durable Object using @cloudflare/agents.
+// MCP server implemented as a Cloudflare Durable Object.
 //
-// @cloudflare/agents v0.0.16 exports `Agent` (not `McpAgent`).
-// We extend Agent and wire up @modelcontextprotocol/sdk's McpServer + Web Standard
-// Streamable HTTP transport manually.
-//
-// Each DO instance is stateless per-request — the transport is created fresh for
-// every incoming HTTP request (stateless mode, no sessionIdGenerator).
-//
-import { Agent } from '@cloudflare/agents';
+// We intentionally do NOT extend @cloudflare/agents' Agent base class.
+// Agent requires Durable Object SQLite (state.sql) to be enabled for the class,
+// and DO SQL cannot be retrofitted onto an already-deployed DO class.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
@@ -18,10 +13,16 @@ import { getDeveloperProfile } from './tools/get-developer-profile';
 import { compareDevelopers } from './tools/compare-developers';
 import type { Env } from '../types/env';
 
-export class WhodoestheworkMCP extends Agent<Env> {
+export class WhodoestheworkMCP {
+  private env: Env;
+
+  constructor(_state: DurableObjectState, env: Env) {
+    this.env = env;
+  }
+
   /**
    * Create and configure a fresh McpServer instance.
-   * Called once per request inside onRequest() so that each stateless
+   * Called once per request inside fetch() so that each stateless
    * Streamable HTTP session gets its own server object.
    */
   private createMcpServer(): McpServer {
@@ -126,7 +127,21 @@ export class WhodoestheworkMCP extends Agent<Env> {
    * Handle every incoming HTTP request.
    * A new stateless transport + McpServer is created per request.
    */
-  async onRequest(request: Request): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
+    // The MCP SDK transport is strict about Accept headers on POST.
+    // Some MCP clients send `Accept: */*` or only `application/json`, which
+    // the transport rejects with 406. Normalize to the required values.
+    if (request.method === 'POST') {
+      const accept = request.headers.get('accept') ?? '';
+      const needsJson = !accept.includes('application/json');
+      const needsSse = !accept.includes('text/event-stream');
+      if (needsJson || needsSse) {
+        const headers = new Headers(request.headers);
+        headers.set('accept', 'application/json, text/event-stream');
+        request = new Request(request, { headers });
+      }
+    }
+
     // ------------------------------------------------------------------
     // Wire up a fresh stateless MCP transport for this request
     // ------------------------------------------------------------------

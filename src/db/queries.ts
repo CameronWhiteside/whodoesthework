@@ -1,6 +1,6 @@
 // src/db/queries.ts
 // All database access lives here. Never write DB calls outside this class.
-import { eq, and, desc, gte } from 'drizzle-orm';
+import { eq, and, desc, gte, sql, gt } from 'drizzle-orm';
 import type { DrizzleDB } from './client';
 import { developers, repos, contributions, reviews, developerDomains } from './schema';
 import type { DeveloperScore } from '../schemas/developer';
@@ -35,15 +35,100 @@ export class Queries {
       });
   }
 
-  async updateIngestionStatus(id: string, status: string) {
+  // ── Ingestion lifecycle methods ─────────────────────────────────────────────
+  // Each method encodes the correct semantic for its transition.
+  // NEVER call the generic updateIngestionStatus for in_progress or complete —
+  // it would poison last_ingested_at which controls incremental commit fetching.
+
+  /** Transition to in_progress: stamp ingestion_started_at, increment attempt count.
+   *  Does NOT touch last_ingested_at so the next analyzeRepo uses the correct `since`. */
+  async setIngestionInProgress(id: string) {
     await this.db.update(developers)
-      .set({ ingestionStatus: status, lastIngestedAt: new Date().toISOString() })
+      .set({
+        ingestionStatus: 'in_progress',
+        ingestionStartedAt: new Date().toISOString(),
+        ingestionAttemptCount: sql`COALESCE(ingestion_attempt_count, 0) + 1`,
+      })
       .where(eq(developers.id, id));
   }
 
-  // Alias kept for internal use by other methods
+  /** Transition to complete: stamp last_ingested_at, clear failure fields. */
+  async markIngestionComplete(id: string) {
+    await this.db.update(developers)
+      .set({
+        ingestionStatus: 'complete',
+        lastIngestedAt: new Date().toISOString(),
+        ingestionFailureReason: null,
+        ingestionLastError: null,
+      })
+      .where(eq(developers.id, id));
+  }
+
+  /** Transition to failed: record why. */
+  async setIngestionFailed(id: string, reason: string, errorMsg?: string) {
+    await this.db.update(developers)
+      .set({
+        ingestionStatus: 'failed',
+        ingestionFailureReason: reason,
+        ingestionLastError: errorMsg ? errorMsg.slice(0, 500) : null,
+      })
+      .where(eq(developers.id, id));
+  }
+
+  /** Reset to pending for retry (clears failure fields, preserves last_ingested_at). */
+  async resetToPending(id: string) {
+    await this.db.update(developers)
+      .set({
+        ingestionStatus: 'pending',
+        ingestionStartedAt: null,
+        ingestionFailureReason: null,
+        ingestionLastError: null,
+      })
+      .where(eq(developers.id, id));
+  }
+
+  /** Generic status setter — kept for backward compat but routes to typed methods. */
+  async updateIngestionStatus(id: string, status: string) {
+    if (status === 'in_progress') return this.setIngestionInProgress(id);
+    if (status === 'complete') return this.markIngestionComplete(id);
+    await this.db.update(developers)
+      .set({ ingestionStatus: status })
+      .where(eq(developers.id, id));
+  }
+
+  // Alias for internal callers
   async setIngestionStatus(id: string, status: string) {
     return this.updateIngestionStatus(id, status);
+  }
+
+  /** Returns true if this developer has meaningful ingested data (minimum completeness). */
+  async meetsCompletenessThreshold(id: string): Promise<boolean> {
+    // raw SQL: count contributions and check score in one pass
+    const contribRow = await this.db
+      .select({ cnt: sql<number>`COUNT(*)` })
+      .from(contributions)
+      .where(eq(contributions.developerId, id))
+      .get();
+    const contribCount = contribRow?.cnt ?? 0;
+    if (contribCount >= 5) return true;
+
+    const devRow = await this.db
+      .select({
+        overallImpact: developers.overallImpact,
+        codeQuality: developers.codeQuality,
+      })
+      .from(developers)
+      .where(eq(developers.id, id))
+      .get();
+    if ((devRow?.overallImpact ?? 0) > 0) return true;
+    if ((devRow?.codeQuality ?? 0) > 0) return true;
+
+    const domainRow = await this.db
+      .select({ cnt: sql<number>`COUNT(*)` })
+      .from(developerDomains)
+      .where(eq(developerDomains.developerId, id))
+      .get();
+    return (domainRow?.cnt ?? 0) >= 1;
   }
 
   async updateScores(id: string, scores: DeveloperScore) {
@@ -198,6 +283,8 @@ export class Queries {
     description: string | null,
     topics: string[],
   ) {
+    const topicsJson = JSON.stringify(topics);
+    const now = new Date().toISOString();
     await this.db.insert(repos)
       .values({
         fullName,
@@ -206,18 +293,21 @@ export class Queries {
         stars,
         contributorsCount,
         hasTests,
-        topics: JSON.stringify(topics),
-        cachedAt: new Date().toISOString(),
+        topics: topicsJson,
+        cachedAt: now,
       })
       .onConflictDoUpdate({
         target: repos.fullName,
         set: {
-          description,
-          stars,
-          contributorsCount,
-          hasTests,
-          topics: JSON.stringify(topics),
-          cachedAt: new Date().toISOString(),
+          // Prefer incoming value if non-null/non-zero; otherwise preserve existing.
+          // This prevents placeholder writes (null, 0, []) from clobbering real metadata.
+          description: sql`COALESCE(${description}, description)`,
+          primaryLanguage: sql`COALESCE(${language}, primary_language)`,
+          stars: sql`CASE WHEN ${stars} > 0 THEN ${stars} ELSE stars END`,
+          contributorsCount: sql`COALESCE(${contributorsCount}, contributors_count)`,
+          hasTests: sql`CASE WHEN ${hasTests ? 1 : 0} = 1 THEN 1 ELSE has_tests END`,
+          topics: sql`CASE WHEN ${topicsJson} != '[]' THEN ${topicsJson} ELSE topics END`,
+          cachedAt: now,
         },
       });
   }
@@ -303,9 +393,11 @@ export class Queries {
     minReview?: number;
     limit: number;
   }) {
+    // Gate: only return developers that have meaningful data (overall_impact > 0)
     const conditions = [
       eq(developers.optedOut, false),
       eq(developers.ingestionStatus, 'complete'),
+      gt(developers.overallImpact, 0),
       ...(opts.minQuality !== undefined ? [gte(developers.codeQuality, opts.minQuality)] : []),
       ...(opts.minReview !== undefined ? [gte(developers.reviewQuality, opts.minReview)] : []),
     ];

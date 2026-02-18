@@ -14,6 +14,68 @@ function commitLookbackSince(): string {
   return d.toISOString();
 }
 
+// ── Patch/diff fallback for commit detail ─────────────────────────────────────
+// When the authenticated GitHub API cannot return commit detail (rate limit, etc.)
+// try fetching the raw .patch from github.com (unauthenticated, lower rate).
+
+async function fetchPatchFallback(
+  repoFullName: string,
+  sha: string,
+): Promise<import('../schemas/github').GitHubCommitDetail | null> {
+  try {
+    const url = `https://github.com/${repoFullName}/commit/${sha}.patch`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'whodoesthe.work/0.1' } });
+    if (!res.ok) {
+      console.warn(`[pipeline] PATCH_FALLBACK_FAILED ${sha}: HTTP ${res.status}`);
+      return null;
+    }
+    const patch = await res.text();
+    console.log(`[pipeline] PATCH_FALLBACK_USED ${sha}`);
+
+    // Parse the unified diff to extract file paths and line counts.
+    const files: import('../schemas/github').GitHubCommitDetail['files'] = [];
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+    let currentFile: string | null = null;
+    let fileAdditions = 0;
+    let fileDeletions = 0;
+
+    for (const line of patch.split('\n')) {
+      if (line.startsWith('diff --git ')) {
+        if (currentFile) {
+          files.push({ filename: currentFile, additions: fileAdditions, deletions: fileDeletions, status: 'modified', patch: '' });
+        }
+        // Extract filename from "diff --git a/path b/path"
+        const match = line.match(/diff --git a\/.+ b\/(.+)/);
+        currentFile = match?.[1] ?? null;
+        fileAdditions = 0;
+        fileDeletions = 0;
+      } else if (line.startsWith('+') && !line.startsWith('+++')) {
+        fileAdditions++;
+        totalAdditions++;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        fileDeletions++;
+        totalDeletions++;
+      }
+    }
+    if (currentFile) {
+      files.push({ filename: currentFile, additions: fileAdditions, deletions: fileDeletions, status: 'modified', patch: '' });
+    }
+
+    // Return a minimal GitHubCommitDetail-shaped object from patch data.
+    return {
+      sha,
+      commit: { author: { date: new Date().toISOString() }, message: '' },
+      parents: [{ sha: '' }],
+      stats: { additions: totalAdditions, deletions: totalDeletions, total: totalAdditions + totalDeletions },
+      files,
+    } as import('../schemas/github').GitHubCommitDetail;
+  } catch (err) {
+    console.warn(`[pipeline] PATCH_FALLBACK_FAILED ${sha}:`, err);
+    return null;
+  }
+}
+
 // ── analyze_repo ──────────────────────────────────────────────────────────────
 
 export async function analyzeRepo(
@@ -35,9 +97,14 @@ export async function analyzeRepo(
 
   const centrality = 0.1;
 
-  // Incremental fetch: only commits since last ingestion.
-  // For first-time ingestion, use a 2-year lookback rather than all history.
-  const since = dev.lastIngestedAt ?? commitLookbackSince();
+  // Incremental fetch: only use last_ingested_at as `since` when it represents a
+  // *previous* successful completion (i.e. it predates the current attempt start).
+  // Without this guard, a first-time ingestion sets last_ingested_at=now via the old
+  // updateIngestionStatus call, then queries commits with since=now → 0 commits.
+  const hasValidPreviousCompletion =
+    dev.lastIngestedAt != null &&
+    (dev.ingestionStartedAt == null || dev.lastIngestedAt < dev.ingestionStartedAt);
+  const since = hasValidPreviousCompletion ? dev.lastIngestedAt! : commitLookbackSince();
 
   let page = 1;
   let hasMore = true;
@@ -55,8 +122,15 @@ export async function analyzeRepo(
       try {
         const res = await gh.getCommitDetail(repoFullName, commit.sha);
         detail = res.data;
-      } catch {
-        continue;
+      } catch (apiErr) {
+        // API commit detail failed — try fetching the raw .patch from github.com as fallback.
+        const patchDetail = await fetchPatchFallback(repoFullName, commit.sha);
+        if (patchDetail) {
+          detail = patchDetail;
+        } else {
+          console.warn(`[pipeline] Skipping commit ${commit.sha}: both API and patch fallback failed`);
+          continue;
+        }
       }
 
       if (detail.stats.total > MAX_COMMIT_LINES) continue;

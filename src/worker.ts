@@ -16,6 +16,7 @@ import { queueMessageSchema } from './schemas/queue';
 import { analyzeRepo, analyzeReviews } from './ingestion/pipeline';
 import { buildVectorsForDeveloper, classifyDeveloperContributions, computeScoresForDeveloper } from './scoring/pipeline';
 import { createDB } from './db/client';
+import { Queries } from './db/queries';
 import { developers } from './db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -104,7 +105,15 @@ export default {
           // 3) Build vectors
           await env.INGESTION_QUEUE.send({ type: 'build_vectors', developerId });
         } else if (payload.type === 'build_vectors') {
-          await buildVectorsForDeveloper(env, payload.developerId);
+          const vectorsBuilt = await buildVectorsForDeveloper(env, payload.developerId);
+          // Safety net: mark complete only if the developer met the completeness threshold
+          // and vectors were actually built. This catches developers whose DO completion
+          // counter never fired (DLQ exhaustion). If the DO path already marked complete,
+          // this is a no-op write. If below threshold, leave status as-is for repair.
+          if (vectorsBuilt) {
+            const queries = new Queries(createDB(env.DB));
+            await queries.markIngestionComplete(payload.developerId);
+          }
         } else {
           // ingest_developer → Durable Object.
           const stub = env.INGESTION_DO.get(env.INGESTION_DO.idFromName(payload.username));

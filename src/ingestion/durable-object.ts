@@ -7,7 +7,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types/env';
 import { createDB } from '../db/client';
 import { Queries } from '../db/queries';
-import { GitHubClient } from './github-client';
+import { GitHubClient, isRateLimitError } from './github-client';
 import { discoverRepos } from './discovery';
 import { queueMessageSchema } from '../schemas/queue';
 
@@ -92,19 +92,32 @@ export class DeveloperIngestion extends DurableObject<Env> {
   private async ingestDeveloper(username: string): Promise<void> {
     const gh = new GitHubClient(this.env.GITHUB_TOKEN);
 
-    // 1. Fetch user profile
-    const { data: user } = await gh.getUser(username);
+    // 1. Fetch user profile — try authenticated first, fall back to public API
+    //    when the token is rate-limited so the developer shell is always written to D1.
+    let user: import('../schemas/github').GitHubUser;
+    try {
+      const { data } = await gh.getUser(username);
+      user = data;
+    } catch (err) {
+      if (isRateLimitError(err)) {
+        console.warn(`[ingestDeveloper] Token rate-limited for ${username}, using public API fallback. GETUSER_PUBLIC_FALLBACK`);
+        user = await gh.getUserPublic(username);
+      } else {
+        throw err;
+      }
+    }
 
-    // 2. Upsert developer record
+    // 2. Upsert developer shell immediately — card is no longer blank while pipeline runs.
     const developerId = String(user.id);
     await this.queries.upsertDeveloper({ id: developerId, username: user.login });
-    await this.queries.setIngestionStatus(developerId, 'in_progress');
+    await this.queries.setIngestionInProgress(developerId);
 
     // 3. Discover repos
     const repos = await discoverRepos(gh, username);
 
     if (repos.length === 0) {
-      await this.queries.setIngestionStatus(developerId, 'complete');
+      // No accessible repos — not an error but we can't produce a meaningful profile.
+      await this.queries.setIngestionFailed(developerId, 'NO_ACCESSIBLE_REPOS', `No public repos found for ${username}`);
       return;
     }
 
@@ -140,10 +153,10 @@ export class DeveloperIngestion extends DurableObject<Env> {
     await this.ctx.storage.put(`repos_completed:${developerId}`, newCompleted);
 
     if (newCompleted >= dispatched && dispatched > 0) {
-      await this.queries.setIngestionStatus(developerId, 'complete');
-
+      // Queue downstream pipeline. The build_vectors handler has a safety net that
+      // marks complete after vectors are built — so we don't set complete here.
+      // Keeping the DO path lean avoids double-writes in the happy path.
       await this.env.INGESTION_QUEUE.send({ type: 'compute_scores', developerId });
-      await this.env.INGESTION_QUEUE.send({ type: 'build_vectors', developerId });
     }
   }
 }
