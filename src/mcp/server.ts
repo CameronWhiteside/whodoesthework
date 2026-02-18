@@ -12,6 +12,7 @@ import { searchDevelopers } from './tools/search-developers';
 import { getDeveloperProfile } from './tools/get-developer-profile';
 import { compareDevelopers } from './tools/compare-developers';
 import type { Env } from '../types/env';
+import { TOPIC_MAX_TOPICS_PER_REQUEST } from '../shared/constants';
 
 export class WhodoestheworkMCP {
   private env: Env;
@@ -81,6 +82,9 @@ export class WhodoestheworkMCP {
           'Include links to top contributions as evidence.',
         ),
         domains: z.array(z.string()).optional().describe('Focus the profile on these domains.'),
+        topics: z.array(z.string().min(1)).max(TOPIC_MAX_TOPICS_PER_REQUEST).optional().describe(
+          'Optional discovery topics (e.g. "email sequencing", "llm", "kafka"). Returns evidence-backed topic experience signals.',
+        ),
       },
       async (params) => {
         const profile = await getDeveloperProfile(params, this.env);

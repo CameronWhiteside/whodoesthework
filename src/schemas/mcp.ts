@@ -1,5 +1,6 @@
 // src/schemas/mcp.ts
 import { z } from 'zod';
+import { TOPIC_MAX_TOPICS_PER_REQUEST } from '../shared/constants';
 
 export const searchDevelopersInputSchema = z.object({
   query: z.string().min(1),
@@ -41,6 +42,7 @@ export const getDeveloperProfileInputSchema = z.object({
   githubUsername: z.string().min(1),
   includeEvidence: z.boolean().optional().default(true),
   domains: z.array(z.string()).optional(),
+  topics: z.array(z.string().min(1)).max(TOPIC_MAX_TOPICS_PER_REQUEST).optional(),
 });
 
 export type GetDeveloperProfileInput = z.infer<typeof getDeveloperProfileInputSchema>;

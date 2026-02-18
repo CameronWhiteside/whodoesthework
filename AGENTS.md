@@ -26,10 +26,12 @@ spec-04: AI Classification        — contribution type + domain tags (Workers A
     ↓
 spec-05: Scoring Engine           — SEU → EffortH → QualityH → ValueH model
     ↓
+spec-11: Repo Portfolio           — derived per-(developer,repo) summaries for discovery + topic evidence
+    ↓
 D1 (SQLite)                       — scores, domains, contributions (via Drizzle)
 Vectorize                         — developer domain embeddings (semantic search)
     ↓
-spec-07: MCP Server               — power-user API (Agents SDK, Bearer token auth)
+spec-07: MCP Server               — power-user API (open; no auth)
 spec-09: REST API (Hono) + UI     — demo web product (SvelteKit + Cloudflare Pages)
 ```
 
@@ -84,15 +86,16 @@ Read the full spec before implementing. These summaries are orientation, not sub
 | Spec | What it is | Key decisions |
 | --- | --- | --- |
 | **spec-00** | Zod schemas + TypeScript types + `constants.ts` + wrangler.jsonc | Zod-first: all types are `z.infer<>`, never hand-written interfaces. `wdtw-` prefix on all CF resources. |
-| **spec-01** | Drizzle D1 schema + typed query layer | No raw SQL anywhere. `Queries` class wraps all DB access. 5 tables: developers, repos, contributions, reviews, developer_domains. No auth/shortlist tables — those are cut. |
-| **spec-02** | GitHub ingestion via Durable Objects + Queues | Durable Objects serialize per-developer ingestion. Queue messages: `ingest_developer` → `analyze_repo` → `compute_scores` → `build_vectors`. Inline analysis (no R2). |
+| **spec-01** | Drizzle D1 schema + typed query layer | No raw SQL anywhere. `Queries` class wraps all DB access. 6 tables: developers, repos, contributions, reviews, developer_domains, developer_repo_portfolios. |
+| **spec-02** | GitHub ingestion via Durable Objects + Queues | Durable Objects serialize per-developer ingestion. Queue messages: `ingest_developer` → `analyze_repo` → `compute_scores` → `build_portfolio` → `build_vectors`. Inline analysis (no R2). |
 | **spec-03** | Analysis pure functions (complexity, entropy, test ratio) | `analyzeCommitDetail(detail)` returns flat `CommitAnalysisResult`. DECISION_POINTS_RE regex for cyclomatic complexity. Normalized Shannon entropy H ∈ [0,1]. `testRatio = testChurn / totalChurn`. |
 | **spec-04** | Workers AI classification (contribution type + domain tags) | `DOMAIN_TAXONOMY` is a hint vocabulary, not a constraint. Repo `topics` (from GitHub) are used directly — highest confidence signal, skip AI. Free-form kebab-case domain tags stored as-is. |
 | **spec-05** | Scoring engine (SEU/EffortH/QualityH model) | All coefficients in `constants.ts`. `computeSEU`, `computeEffortH`, `computeQualityH`, `computeCentralityProxy`, `computeContributionValue` are exported pure functions. Log-scale normalization throughout. |
 | **spec-06** | Vectorize semantic search | Embeds developer domain profile text. `executeSearch(env, { query, limit })` is the public interface. Query expansion happens in spec-09 before calling this. |
-| **spec-07** | MCP server (Agents SDK) | Open — no auth. AI-generated `match_explanation` via Workers AI Promise.all(). |
+| **spec-07** | MCP server (MCP SDK) | Open — no auth. Tool surface: `search_developers`, `get_developer_profile` (supports `topics[]` for evidence-backed discovery), `compare_developers`. |
 | **spec-08** | End-to-end integration + deploy | Wires all specs together. Seed D1 with real ingested developers before demo. |
 | **spec-09** | Demo web UI + Hono REST API | Public endpoints (no auth). No shortlist — removed from scope. Query expansion via Workers AI before Vectorize. `GET /api/domains` powers live domain chips. `GET /admin/stats` powers live index counts. |
+| **spec-11** | Repo portfolio + discovery evidence | Derived per-(developer,repo) summaries stored in D1 to support discovery questions and topic experience evaluation with GitHub evidence. |
 
 Execution order: `spec-00 → spec-01 → [spec-02 + spec-03 + spec-04 in parallel] → spec-05 → spec-06 → spec-07 → spec-08 → spec-09`
 
@@ -275,7 +278,7 @@ QUALITY_MAX = 1.2;
 
 // Log-scale normalization references (calibration knobs)
 CODE_QUALITY_REF = 15.0; // "strong" contribution → score ≈ 100
-DOMAIN_SCORE_REF = 500; // ~20 good domain contributions → score ≈ 80
+DOMAIN_SCORE_REF = 25_000; // calibrated to avoid saturating active developers at 100
 RECENT_ACTIVITY_REF = 20; // 20 contributions in 12mo → score = 100
 
 RECENCY_LAMBDA = 0.05; // exp(-λ × months): 78% at 5mo, 55% at 12mo
@@ -308,6 +311,13 @@ The domain vocabulary grows organically. After ingesting a batch of developers, 
 | Match explanation (why matched)    | `@cf/meta/llama-3.1-8b-instruct` | `max_tokens: 80, temperature: 0.4`  |
 | Query expansion (before Vectorize) | `@cf/meta/llama-3.1-8b-instruct` | `max_tokens: 120, temperature: 0.2` |
 | Text embeddings (Vectorize)        | `@cf/baai/bge-base-en-v1.5`      | 768 dimensions                      |
+
+---
+
+## Calibration learnings
+
+- If you see many domain scores pinned at 100, raise `DOMAIN_SCORE_REF` (log normalization) to preserve resolution.
+- When calibration constants change, trigger `/admin/reindex` so stored aggregates + vectors get recomputed.
 
 **Always use `Promise.all()` for parallel AI calls.** Never `await` in a loop.
 

@@ -19,7 +19,8 @@ export interface DeveloperDomainVector {
  */
 function buildDomainText(
   domains: { domain: string; score: number; evidenceRepos: string[] }[],
-  languages: string[]
+  languages: string[],
+  portfolioRepos: { repoFullName: string; stars: number }[],
 ): string {
   const topDomains = [...domains].sort((a, b) => b.score - a.score).slice(0, 6);
 
@@ -33,10 +34,15 @@ function buildDomainText(
   const repoLine   = allRepos.length  > 0 ? `Key repositories: ${allRepos.join(', ')}. ` : '';
   const langLine   = languages.length > 0 ? `Primary languages: ${languages.join(', ')}. ` : '';
 
+  const portfolioLine = portfolioRepos.length > 0
+    ? `Portfolio repos: ${portfolioRepos.slice(0, 8).map(r => `${r.repoFullName} (${r.stars}★)`).join(', ')}. `
+    : '';
+
   return (
     `Software engineer specializing in ${primaryDomain}. ` +
     repoLine +
     langLine +
+    portfolioLine +
     `Domain expertise: ${domainList}.`
   );
 }
@@ -50,11 +56,12 @@ export async function upsertDeveloperVector(
   vectorIndex: VectorizeIndex,
   developerId: string,
   domains: { domain: string; score: number; evidenceRepos: string[] }[],
-  languages: string[]
+  languages: string[],
+  portfolioRepos: { repoFullName: string; stars: number }[] = [],
 ): Promise<string> {
   if (domains.length === 0) return '';
 
-  const text = buildDomainText(domains, languages);
+  const text = buildDomainText(domains, languages, portfolioRepos);
   const vector = await embed(ai, text);
   const vectorId = `dev-${developerId}`;
 
@@ -70,6 +77,7 @@ export async function upsertDeveloperVector(
       topDomain: sortedDomains[0]?.domain ?? 'unknown',
       topScore:  sortedDomains[0]?.score  ?? 0,
       languages: languages.slice(0, 6).join(','),
+      facets: 'scale,topics',
     },
   }]);
 

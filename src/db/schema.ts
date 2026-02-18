@@ -117,3 +117,22 @@ export const developerDomains = sqliteTable('developer_domains', {
   index('idx_developer_domains_domain').on(t.domain),
   index('idx_developer_domains_score').on(t.score),
 ]);
+
+// ============================================================
+// Developer repo portfolios (derived summaries for discovery)
+// One row per (developer, repo) used for topic experience + scale heuristics.
+// ============================================================
+export const developerRepoPortfolios = sqliteTable('developer_repo_portfolios', {
+  developerId: text('developer_id').notNull(),
+  repoFullName: text('repo_full_name').notNull(),
+  stars: integer('stars').notNull().default(0),
+  contributorsCount: integer('contributors_count'),
+  recentContribCount12mo: integer('recent_contrib_count_12mo').notNull().default(0),
+  totalContribCount: integer('total_contrib_count').notNull().default(0),
+  summaryText: text('summary_text').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.developerId, t.repoFullName] }),
+  index('idx_dev_repo_portfolios_developer').on(t.developerId),
+  index('idx_dev_repo_portfolios_repo').on(t.repoFullName),
+]);

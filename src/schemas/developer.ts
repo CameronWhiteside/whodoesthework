@@ -52,6 +52,41 @@ export const developerProfileSchema = developerScoreSchema.extend({
       depthScore: z.number().min(0).max(100),
     })),
   }),
+
+  // Discovery-oriented, evidence-backed summaries.
+  discovery: z.object({
+    scale: z.object({
+      score: z.number().min(0).max(100),
+      note: z.string(),
+      evidenceRepos: z.array(z.object({
+        repoFullName: z.string(),
+        stars: z.number().int().min(0),
+        contributorsCount: z.number().int().min(0).nullable(),
+        recentContribCount12mo: z.number().int().min(0),
+        totalContribCount: z.number().int().min(0),
+      })),
+      evidenceCommits: z.array(z.object({
+        url: z.string().url(),
+        description: z.string().max(120),
+      })),
+    }),
+    topicExperience: z.array(z.object({
+      topic: z.string(),
+      score: z.number().min(0).max(1),
+      evidenceRepos: z.array(z.object({
+        repoFullName: z.string(),
+        similarity: z.number(),
+        stars: z.number().int().min(0),
+        contributorsCount: z.number().int().min(0).nullable(),
+        recentContribCount12mo: z.number().int().min(0),
+        totalContribCount: z.number().int().min(0),
+      })),
+      evidenceCommits: z.array(z.object({
+        url: z.string().url(),
+        description: z.string().max(120),
+      })),
+    })),
+  }).optional(),
 });
 
 export type DeveloperProfile = z.infer<typeof developerProfileSchema>;

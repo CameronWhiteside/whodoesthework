@@ -98,6 +98,75 @@ router.get('/admin/stats', async (c) => {
   });
 });
 
+// ── POST /admin/ingest-from-repos ────────────────────────────────────────────
+// Fast alternative to /admin/discover: accepts an explicit list of repo full
+// names (e.g. ["cloudflare/workers-sdk", "tokio-rs/tokio"]), fetches page 1
+// of contributors for each repo (one API call each), deduplicates against
+// already-indexed developers, and queues new ones.
+//
+// Designed to run well within the 30s Worker limit — 10-15 repos ≈ 5-10s.
+//
+// Body:
+//   { repos: string[], contributorsPerRepo?: number }
+
+router.post('/admin/ingest-from-repos', async (c) => {
+  let body: { repos?: string[]; contributorsPerRepo?: number; maxPerRepo?: number } = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+
+  const repos = body.repos ?? [];
+  const perRepo = Math.min(body.contributorsPerRepo ?? body.maxPerRepo ?? 30, 100);
+
+  if (repos.length === 0) {
+    return c.json({ error: 'repos array is required' }, 400);
+  }
+
+  const gh = new GitHubClient(c.env.GITHUB_TOKEN);
+  const db = createDB(c.env.DB);
+
+  const existingRows = await db.select({ username: developers.username }).from(developers).all();
+  const existingSet = new Set(existingRows.map((r) => r.username.toLowerCase()));
+
+  const discovered = new Set<string>();
+  const skipped: string[] = [];
+
+  for (const repo of repos) {
+    try {
+      const { data: contributors } = await gh.getContributors(repo, 1);
+      for (const c of contributors.filter((x) => x.type === 'User').slice(0, perRepo)) {
+        if (c.login) discovered.add(c.login);
+      }
+    } catch (err) {
+      console.warn(`[ingest-from-repos] failed to fetch contributors for ${repo}:`, err);
+      skipped.push(repo);
+    }
+  }
+
+  const queued: string[] = [];
+  for (const username of discovered) {
+    if (existingSet.has(username.toLowerCase())) continue;
+    try {
+      const stub = c.env.INGESTION_DO.get(c.env.INGESTION_DO.idFromName(username));
+      await stub.fetch('http://do/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      queued.push(username);
+    } catch (err) {
+      console.warn(`[ingest-from-repos] failed to queue ${username}:`, err);
+    }
+  }
+
+  return c.json({
+    repos_processed: repos.length - skipped.length,
+    repos_skipped: skipped,
+    contributors_found: discovered.size,
+    already_indexed: discovered.size - queued.length,
+    queued: queued.length,
+    queued_usernames: queued,
+  });
+});
+
 // ── POST /admin/discover ─────────────────────────────────────────────────────
 // Runs GitHub repo→contributor discovery for the given domains+languages,
 // deduplicates against already-indexed developers, and queues the new ones.

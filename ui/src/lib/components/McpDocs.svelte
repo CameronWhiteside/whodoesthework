@@ -77,17 +77,19 @@
 
     <div class="tool">
       <h3 class="tool-name mono">get_developer_profile</h3>
-      <p class="copy">Get a scored profile for a GitHub username (domains, evidence repos, score breakdown).</p>
+      <p class="copy">Get a scored profile for a GitHub username, plus discovery-ready evidence for scale + arbitrary topics.</p>
       <div class="params mono">
         <div><code>githubUsername</code> string (required)</div>
         <div><code>includeEvidence</code> boolean (default true)</div>
         <div><code>domains</code> string[] (optional)</div>
+        <div><code>topics</code> string[] (optional; e.g. "email sequencing", "llm", "kafka")</div>
       </div>
       <pre class="code mono">{`{
   "tool": "get_developer_profile",
   "arguments": {
     "githubUsername": "someuser",
-    "includeEvidence": true
+    "includeEvidence": true,
+    "topics": ["email sequencing", "llm evals"]
   }
 }`}</pre>
 
@@ -111,7 +113,31 @@
       "contributionCount": 47,
       "evidenceRepos": ["org/raft-kv", "org/txn-log"]
     }
-  ]
+  ],
+  "discovery": {
+    "scale": {
+      "score": 63.2,
+      "note": "Scale is a heuristic proxy (stars, contributor counts, and sustained activity). Not a user-count claim.",
+      "evidenceRepos": [
+        { "repoFullName": "org/big-repo", "stars": 12000, "contributorsCount": 450, "recentContribCount12mo": 18, "totalContribCount": 94 }
+      ],
+      "evidenceCommits": [
+        { "url": "https://github.com/org/big-repo/commit/<sha>", "description": "perf: reduce query latency in hot path" }
+      ]
+    },
+    "topicExperience": [
+      {
+        "topic": "email sequencing",
+        "score": 0.71,
+        "evidenceRepos": [
+          { "repoFullName": "org/mailer", "similarity": 0.71, "stars": 340, "contributorsCount": 12, "recentContribCount12mo": 7, "totalContribCount": 31 }
+        ],
+        "evidenceCommits": [
+          { "url": "https://github.com/org/mailer/commit/<sha>", "description": "add suppression + unsubscribe handling" }
+        ]
+      }
+    ]
+  }
 }`}</pre>
     </div>
 

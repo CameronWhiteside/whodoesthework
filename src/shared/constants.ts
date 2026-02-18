@@ -41,8 +41,11 @@ export const QUALITY_MAX = 1.20;                   // ceiling — 20% bonus for 
 export const CODE_QUALITY_REF = 15.0;
 
 // domainScore = min(100, ln(1 + Σ recencyWeightedScore) / ln(1 + DOMAIN_SCORE_REF) × 100)
-// Calibrated: ~20 good contributions over 12 months → domain score ≈ 80.
-export const DOMAIN_SCORE_REF = 500;
+// Calibration note:
+// - Earlier versions used a much smaller ref, which saturated many developers at 100.
+// - DOMAIN_SCORE_REF is intentionally large so domain scores preserve resolution
+//   across active engineers (hundreds of scored commits) without pinning at 100.
+export const DOMAIN_SCORE_REF = 25_000;
 
 // recentActivityScore = min(100, ln(1+recentCount) / ln(1+RECENT_ACTIVITY_REF) × 100)
 // Calibrated: 20 contributions in last 12 months → score = 100.
@@ -79,3 +82,42 @@ export const REVIEW_SUBSTANTIVE_WEIGHT = 0.40;    // fraction with code-line ref
 export const REVIEW_DEPTH_WEIGHT = 0.30;          // comment depth (count + length)
 export const REVIEW_CHANGE_REQUEST_WEIGHT = 0.10; // willingness to request changes
 export const REVIEW_NOT_RUBBER_STAMP_WEIGHT = 0.20; // penalize fast zero-comment approvals
+
+// ── Discovery / Experience Heuristics (Spec-11) ──────────────────────────────
+
+// Portfolio builder caps (keeps derived data small and cheap)
+export const PORTFOLIO_MAX_REPOS = 25;
+export const PORTFOLIO_RECENT_MONTHS = 12;
+export const PORTFOLIO_MAX_COMMIT_HEADS_PER_REPO = 8;
+export const PORTFOLIO_MAX_TOPICS_PER_REPO = 12;
+export const PORTFOLIO_MAX_DESC_CHARS = 240;
+export const PORTFOLIO_MAX_COMMIT_HEAD_CHARS = 120;
+
+// Scale heuristic weights and normalization refs.
+// These are proxy signals only; never used to claim real end-user counts.
+export const SCALE_STARS_REF = 50_000;
+export const SCALE_CONTRIBUTORS_REF = 2_000;
+export const SCALE_RECENT_REPO_CONTRIB_REF = 120;
+
+export const SCALE_WEIGHT_STARS = 0.50;
+export const SCALE_WEIGHT_CONTRIBUTORS = 0.30;
+export const SCALE_WEIGHT_RECENT_CONTRIB = 0.20;
+
+export const SCALE_EVIDENCE_REPO_LIMIT = 5;
+export const SCALE_EVIDENCE_COMMIT_LIMIT = 5;
+export const SCALE_MIN_REPO_SCORE_FOR_EVIDENCE = 15;
+
+// Topic experience evaluation (embedding-based) caps.
+export const TOPIC_MAX_TOPICS_PER_REQUEST = 5;
+export const TOPIC_MAX_REPO_CANDIDATES = 30;
+export const TOPIC_EVIDENCE_REPO_LIMIT = 5;
+export const TOPIC_EVIDENCE_COMMIT_LIMIT = 5;
+
+// Used to annotate "scale work" evidence from commit message heads.
+export const SCALE_COMMIT_KEYWORDS: string[] = [
+  'perf', 'performance', 'latency', 'throughput', 'optimiz', 'cache',
+  'rate limit', 'backpressure', 'queue', 'retry', 'timeout', 'pagination',
+  'index', 'shard', 'partition', 'parallel', 'concurrency',
+  'load', 'scale', 'bottleneck', 'memory', 'cpu',
+  'worker', 'durable object', 'kubernetes', 'k8s',
+];

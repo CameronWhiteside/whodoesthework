@@ -2,7 +2,7 @@
 // All database access lives here. Never write DB calls outside this class.
 import { eq, and, desc, gte, sql, gt } from 'drizzle-orm';
 import type { DrizzleDB } from './client';
-import { developers, repos, contributions, reviews, developerDomains } from './schema';
+import { developers, repos, contributions, reviews, developerDomains, developerRepoPortfolios } from './schema';
 import type { DeveloperScore } from '../schemas/developer';
 
 export class Queries {
@@ -406,6 +406,56 @@ export class Queries {
       .where(and(...conditions))
       .orderBy(desc(developers.overallImpact))
       .limit(opts.limit)
+      .all();
+  }
+
+  // -- Discovery / Portfolio --
+
+  async upsertDeveloperRepoPortfolio(data: {
+    developerId: string;
+    repoFullName: string;
+    stars: number;
+    contributorsCount: number | null;
+    recentContribCount12mo: number;
+    totalContribCount: number;
+    summaryText: string;
+    updatedAt: string;
+  }) {
+    await this.db.insert(developerRepoPortfolios)
+      .values({
+        developerId: data.developerId,
+        repoFullName: data.repoFullName,
+        stars: data.stars,
+        contributorsCount: data.contributorsCount,
+        recentContribCount12mo: data.recentContribCount12mo,
+        totalContribCount: data.totalContribCount,
+        summaryText: data.summaryText,
+        updatedAt: data.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [developerRepoPortfolios.developerId, developerRepoPortfolios.repoFullName],
+        set: {
+          stars: data.stars,
+          contributorsCount: data.contributorsCount,
+          recentContribCount12mo: data.recentContribCount12mo,
+          totalContribCount: data.totalContribCount,
+          summaryText: data.summaryText,
+          updatedAt: data.updatedAt,
+        },
+      });
+  }
+
+  async getDeveloperRepoPortfolios(developerId: string, limit: number) {
+    return this.db
+      .select()
+      .from(developerRepoPortfolios)
+      .where(eq(developerRepoPortfolios.developerId, developerId))
+      .orderBy(
+        desc(developerRepoPortfolios.recentContribCount12mo),
+        desc(developerRepoPortfolios.totalContribCount),
+        desc(developerRepoPortfolios.stars),
+      )
+      .limit(limit)
       .all();
   }
 }

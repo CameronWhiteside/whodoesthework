@@ -6,7 +6,7 @@
 
 import type { Env } from '../types/env';
 import { createDB } from '../db/client';
-import { contributions, developerDomains, repos } from '../db/schema';
+import { contributions, developerDomains, developerRepoPortfolios, repos } from '../db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import { scoreDeveloper } from './aggregate';
 import { upsertDeveloperVector } from '../search/vector-store';
@@ -212,11 +212,19 @@ export async function buildVectorsForDeveloper(env: Env, developerId: string): P
     .slice(0, 6)
     .map(([lang]) => lang);
 
+  const portfolioRows = await db
+    .select({ repoFullName: developerRepoPortfolios.repoFullName, stars: developerRepoPortfolios.stars })
+    .from(developerRepoPortfolios)
+    .where(eq(developerRepoPortfolios.developerId, developerId))
+    .orderBy(desc(developerRepoPortfolios.recentContribCount12mo), desc(developerRepoPortfolios.stars))
+    .limit(10)
+    .all();
+
   // Ensure at least one domain so the vector exists.
   const finalDomains = domains.length > 0
     ? domains
     : [{ domain: DEFAULT_DOMAIN, score: 1, evidenceRepos: [] }];
 
-  await upsertDeveloperVector(env.AI, env.VECTOR_INDEX, developerId, finalDomains, topLanguages);
+  await upsertDeveloperVector(env.AI, env.VECTOR_INDEX, developerId, finalDomains, topLanguages, portfolioRows);
   return true;
 }

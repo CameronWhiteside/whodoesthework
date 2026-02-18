@@ -16,6 +16,7 @@ Developer intelligence platform. Analyzes GitHub contribution history to produce
 - Workers AI classification on every commit (feature/bugfix/refactor/test/docs/etc) and domain tagging
 - Vectorize semantic search with cosine similarity + SQL score filters
 - MCP server open at `/mcp` — `search_developers`, `get_developer_profile`, `compare_developers` all working
+- Discovery-ready profile output: `get_developer_profile` supports `topics[]` and returns evidence-backed "topic experience" + a scale heuristic (stars/contributors/activity)
 - One-pager UI: inline search form, live stats from the real index, pipeline explainer, domain chips, MCP teaser
 - 81 unit tests across the pure-function scoring + analysis modules
 
@@ -33,6 +34,8 @@ Developer intelligence platform. Analyzes GitHub contribution history to produce
 - **SvelteKit adapter-static + Cloudflare Pages serving** — the worker serves the SvelteKit static build via `env.ASSETS`. Works fine, but the integration between `adapter-static` output and Cloudflare's asset routing required some mental model work. The `.svelte-kit/` and `ui/build/` directories should be gitignored (they weren't initially).
 
 - **Workers AI cold classification latency** — first Workers AI call in a request has noticeable warm-up. Solved with `Promise.all()` for parallel classification, but sequential AI calls in the pipeline are a real bottleneck worth watching.
+
+- **Score saturation is real** — early `DOMAIN_SCORE_REF` calibration saturated many domain scores at 100 for active developers. Resolution comes from keeping log-scale refs large enough to preserve separation, then re-running `/admin/reindex` to recompute aggregates.
 
 - **Vitest + Workers TypeScript config** — the main `tsconfig.json` uses `"moduleResolution": "bundler"` and `"types": ["@cloudflare/workers-types"]`. Vitest handles this fine since it uses Vite under the hood, but the CF global types (`Request`, `Response`, etc.) conflict in subtle ways if you ever try to test Worker-specific code directly. For now tests only cover pure functions — keep it that way until `@cloudflare/vitest-pool-workers` is more stable.
 
@@ -60,6 +63,8 @@ Ingestion DO          — fetch commits, PRs, repo metadata
 Workers AI            — classify contribution type, extract domains
     ↓
 Scoring Engine        — SEU/EffortH/QualityH model → 6 dimension scores
+    ↓
+Repo portfolio         — derived per-(developer,repo) summaries for discovery + topic experience
     ↓
 Vectorize             — embed developer profile → semantic search index
     ↓
@@ -129,9 +134,14 @@ src/
       get-developer-profile.ts
       compare-developers.ts
   db/
-    schema.ts                Drizzle D1 schema (5 tables)
+    schema.ts                Drizzle D1 schema (6 tables)
     client.ts                D1 client factory
     queries.ts               All DB access (centralized)
+  experience/
+    portfolio.ts             Derived repo summaries (per developer × repo)
+    topic-experience.ts      Topic → evidence repos via embeddings
+    scale.ts                 Scale heuristic (stars/contributors/activity)
+
   schemas/                   Zod schemas for every data boundary
   shared/constants.ts        All tunable scoring weights and coefficients
   types/env.ts               Cloudflare binding types
@@ -197,6 +207,10 @@ One `DeveloperIngestion` Durable Object instance per developer, sharded by usern
 
 4. **Completion** — when all repos finish, DO queues `compute_scores` and `build_vectors`.
 
+### 1.5. Repo portfolio (derived)
+
+After scoring, the pipeline builds a derived "repo portfolio" per developer: one row per repo they contributed to with a compact summary string and activity counts. This powers discovery-style questions ("have you built at scale?" / "do you have experience with X?") with GitHub evidence.
+
 ### 2. Classification
 
 Runs after ingestion — triggered by the queue or the scheduled cron.
@@ -237,7 +251,7 @@ Domain scores aggregate recency-weighted contribution values per-tag, log-scale 
 
 ### 4. Vectorization
 
-Profile text is built from a developer's top 5 domains (with scores) and primary languages, then embedded via `@cf/baai/bge-base-en-v1.5` (384-dim). Upserted to Cloudflare Vectorize with metadata (`topDomain`, `domainCount`, `languages`).
+Profile text is built from a developer's top domains (with scores), primary languages, and portfolio repo hints, then embedded via `@cf/baai/bge-base-en-v1.5` (768-dim). Upserted to Cloudflare Vectorize with metadata (`topDomain`, `languages`, etc.).
 
 ### 5. Search
 
@@ -250,13 +264,14 @@ Profile text is built from a developer's top 5 domains (with scores) and primary
 
 ## D1 schema
 
-Five tables:
+Six tables:
 
 - **`developers`** — one row per indexed developer, holds all 6 dimension scores + `ingestionStatus` + `scoredAt`
 - **`repos`** — metadata cache for each repo (stars, topics, contributor count, primary language)
 - **`contributions`** — one row per commit SHA, inline metrics, per-contribution scores, classification results
 - **`reviews`** — one row per review, signals for depth and substantiveness
 - **`developer_domains`** — one row per (developer × domain), aggregated score + evidence repos
+- **`developer_repo_portfolios`** — one row per (developer × repo), derived summary text + activity counts (used for discovery + topic experience)
 
 ---
 
@@ -395,7 +410,7 @@ The `ENVIRONMENT` var is non-secret and lives in `wrangler.jsonc`. Never put sec
 
 ## Tuning the scoring model
 
-All coefficients are in `src/shared/constants.ts`. Change a value, redeploy, re-run `compute_scores`. Nothing else needs to change.
+All coefficients are in `src/shared/constants.ts`. Change a value, redeploy, then re-run `/admin/reindex` to recompute aggregates (domain scores, vectors, etc.).
 
 Key knobs:
 

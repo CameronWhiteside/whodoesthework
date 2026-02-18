@@ -15,6 +15,7 @@ import type { Env } from './types/env';
 import { queueMessageSchema } from './schemas/queue';
 import { analyzeRepo, analyzeReviews } from './ingestion/pipeline';
 import { buildVectorsForDeveloper, classifyDeveloperContributions, computeScoresForDeveloper } from './scoring/pipeline';
+import { buildDeveloperRepoPortfolio } from './experience/portfolio';
 import { createDB } from './db/client';
 import { Queries } from './db/queries';
 import { developers } from './db/schema';
@@ -102,8 +103,11 @@ export default {
           // 2) Compute developer + domain scores
           await computeScoresForDeveloper(env, developerId);
 
-          // 3) Build vectors
-          await env.INGESTION_QUEUE.send({ type: 'build_vectors', developerId });
+          // 3) Build derived repo portfolio (for discovery + embeddings)
+          await env.INGESTION_QUEUE.send({ type: 'build_portfolio', developerId });
+        } else if (payload.type === 'build_portfolio') {
+          await buildDeveloperRepoPortfolio(env, payload.developerId);
+          await env.INGESTION_QUEUE.send({ type: 'build_vectors', developerId: payload.developerId });
         } else if (payload.type === 'build_vectors') {
           const vectorsBuilt = await buildVectorsForDeveloper(env, payload.developerId);
           // Safety net: mark complete only if the developer met the completeness threshold
