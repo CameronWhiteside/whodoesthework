@@ -23,29 +23,11 @@
     }
   }
 
-  function cleanWhyMatched(text: string) {
-    return text
-      .trim()
-      .replace(/^\s*(match\s+notes|why\s+matched)\s*:?\s*/i, '')
-      .replace(/^\s*(strong|good|great|high|excellent)\s+fit\s*:?\s*/i, '')
-      .replace(/\s+/g, ' ');
+  $: reposLine = (match.topRepos ?? []).slice(0, 2).join('  /  ');
+
+  function fmtScore(v: number) {
+    return v > 0 ? String(Math.round(v)) : '-';
   }
-
-  $: domainLabels = match.topDomains.map((d) => d.domain);
-  $: domainsShort = domainLabels.slice(0, 2);
-  $: domainsMore = Math.max(0, domainLabels.length - domainsShort.length);
-  $: primaryLanguage = match.topLanguages[0]?.language;
-
-  $: evidenceLine = (() => {
-    const parts: string[] = [];
-    if (domainsShort.length) {
-      parts.push(domainsShort.join(' | ') + (domainsMore ? ` +${domainsMore}` : ''));
-    }
-    if (primaryLanguage) parts.push(primaryLanguage);
-    return parts.join(' | ');
-  })();
-
-  $: whyShort = match.whyMatched ? cleanWhyMatched(match.whyMatched) : '';
 </script>
 
 <div class="card" role="link" tabindex="0" on:click={openProfile} on:keydown={onKeydown}>
@@ -56,8 +38,8 @@
           <span class="rank-badge mono">#{rank}</span>
           <span class="username">@{match.username}</span>
         </div>
-        {#if evidenceLine}
-          <div class="evidence mono" aria-label={`Evidence: ${evidenceLine}`}>{evidenceLine}</div>
+        {#if reposLine}
+          <div class="repos mono" aria-label={`Top repos: ${reposLine}`}>{reposLine}</div>
         {/if}
       </div>
 
@@ -70,9 +52,20 @@
       </div>
     </div>
 
-    {#if whyShort}
-      <p class="why" aria-label="Why matched">{whyShort}</p>
-    {/if}
+    <div class="metrics" aria-label="Developer signals">
+      <span class="metric" title="Code quality score (0-100)">
+        <span class="k mono">Code</span>
+        <span class="v">{fmtScore(match.codeQuality)}</span>
+      </span>
+      <span class="metric" title="Collaboration breadth score (0-100)">
+        <span class="k mono">Collab</span>
+        <span class="v">{fmtScore(match.collaborationBreadth)}</span>
+      </span>
+      <span class="metric" title="Consistency score (0-100)">
+        <span class="k mono">Consistent</span>
+        <span class="v">{fmtScore(match.consistencyScore)}</span>
+      </span>
+    </div>
   </div>
 </div>
 
@@ -154,7 +147,7 @@
     text-overflow: ellipsis;
   }
 
-  .evidence {
+  .repos {
     margin-top: 0.1rem;
     font-size: 0.75rem;
     letter-spacing: 0.04em;
@@ -214,16 +207,35 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .why {
-    margin: 0;
-    color: var(--color-text-2);
-    font-size: 0.85rem;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    color: var(--color-muted);
+  }
+
+  .metric {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(184, 176, 165, 0.50);
+    background: rgba(255, 255, 255, 0.55);
+    font-size: 0.75rem;
+  }
+
+  .metric .k {
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .metric .v {
+    font-weight: 900;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
   }
 
   @media (max-width: 520px) {

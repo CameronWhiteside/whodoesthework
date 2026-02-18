@@ -19,10 +19,12 @@ export interface MatchResult {
   overallImpact: number;
   codeQuality: number;
   reviewQuality: number;
+  collaborationBreadth: number;
+  consistencyScore: number;
   topDomains: { domain: string; score: number }[];
   topLanguages: { language: string; percentage: number }[];
+  topRepos: string[];
   matchConfidence: number; // 0-100
-  whyMatched: string;      // AI-generated explanation
 }
 
 export interface DeveloperProfile {

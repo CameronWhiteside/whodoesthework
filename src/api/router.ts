@@ -372,8 +372,25 @@ router.post('/api/search', async (c) => {
   const ids = results.map((r) => r.developerId);
   const rows = await c.env.DB.prepare(
     // raw SQL: fetch multiple developers by id; gate on overall_impact > 0 to exclude empty profiles
-    `SELECT id, username, overall_impact, code_quality, review_quality FROM developers WHERE id IN (${ids.map(() => '?').join(',')}) AND overall_impact > 0`,
-  ).bind(...ids).all<{ id: string; username: string; overall_impact: number | null; code_quality: number | null; review_quality: number | null }>();
+    `SELECT id,
+            username,
+            overall_impact,
+            code_quality,
+            review_quality,
+            collaboration_breadth,
+            consistency_score
+     FROM developers
+     WHERE id IN (${ids.map(() => '?').join(',')})
+       AND overall_impact > 0`,
+  ).bind(...ids).all<{
+    id: string;
+    username: string;
+    overall_impact: number | null;
+    code_quality: number | null;
+    review_quality: number | null;
+    collaboration_breadth: number | null;
+    consistency_score: number | null;
+  }>();
 
   const byId = new Map((rows.results ?? []).map((r) => [r.id, r]));
 
@@ -390,6 +407,15 @@ router.post('/api/search', async (c) => {
           'SELECT languages FROM contributions WHERE developer_id = ? LIMIT 200',
         ).bind(dev.id).all<{ languages: string }>(),
       ]);
+
+      const repoRows = await c.env.DB.prepare(
+        `SELECT repo_full_name as repoFullName, COUNT(*) as cnt
+         FROM contributions
+         WHERE developer_id = ?
+         GROUP BY repo_full_name
+         ORDER BY cnt DESC
+         LIMIT 2`,
+      ).bind(dev.id).all<{ repoFullName: string; cnt: number }>();
 
       const topDomains = (domainRows.results ?? []).map((d) => ({ domain: d.domain, score: d.score }));
 
@@ -415,11 +441,7 @@ router.post('/api/search', async (c) => {
           percentage: Math.round((count / totalLang) * 100),
         }));
 
-      const domainNames = topDomains.map((d) => d.domain).filter(Boolean);
-      const langNames = topLanguages.map((l) => l.language).filter(Boolean);
-      const whyMatched = domainNames.length || langNames.length
-        ? `Strong fit: evidence in ${domainNames.slice(0, 2).join(', ') || 'relevant domains'} (${langNames.slice(0, 2).join(', ') || 'multiple languages'}).`
-        : 'Strong fit: evidence-backed work similar to your query.';
+      const topRepos = (repoRows.results ?? []).map((rr) => rr.repoFullName).filter(Boolean);
 
       return {
         developerId: dev.id,
@@ -428,10 +450,12 @@ router.post('/api/search', async (c) => {
         overallImpact: dev.overall_impact ?? 0,
         codeQuality: dev.code_quality ?? 0,
         reviewQuality: dev.review_quality ?? 0,
+        collaborationBreadth: dev.collaboration_breadth ?? 0,
+        consistencyScore: dev.consistency_score ?? 0,
         topDomains,
         topLanguages,
         matchConfidence: Math.round(r.similarity * 100),
-        whyMatched,
+        topRepos,
       };
     }),
   );
