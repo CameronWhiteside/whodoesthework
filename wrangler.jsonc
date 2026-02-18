@@ -1,0 +1,91 @@
+{
+  "name": "wdtw",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-12-01",
+
+  // D1 Database
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wdtw-db",
+      "database_id": "d41850db-e514-4155-82d4-bf184c89d8e6"
+    }
+  ],
+
+  // Queues
+  "queues": {
+    "producers": [
+      {
+        "binding": "INGESTION_QUEUE",
+        "queue": "wdtw-ingestion"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "wdtw-ingestion",
+        "max_batch_size": 1,
+        "max_retries": 3,
+        "dead_letter_queue": "wdtw-ingestion-dlq"
+      }
+    ]
+  },
+
+  // Vectorize
+  "vectorize": [
+    {
+      "binding": "VECTOR_INDEX",
+      "index_name": "wdtw-vectors"
+    }
+  ],
+
+  // Durable Objects
+  "durable_objects": {
+    "bindings": [
+      { "name": "INGESTION_DO", "class_name": "DeveloperIngestion" },
+      { "name": "MCP_DO", "class_name": "WhodoestheworkMCP" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "wdtw-v1",
+      "new_classes": ["DeveloperIngestion", "WhodoestheworkMCP"]
+    }
+  ],
+
+  // Workers AI
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Static assets — SvelteKit CSR build served by this Worker
+  "assets": {
+    "directory": "./ui/build",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+
+  // Custom domain — Cloudflare manages DNS, one Worker owns the whole domain
+  "routes": [
+    {
+      "pattern": "whodoesthe.work",
+      "custom_domain": true
+    }
+  ],
+
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+
+  // Secrets (set via `wrangler secret put`):
+  //   GITHUB_TOKEN      — GitHub Personal Access Token (read:user, read:repo)
+  //   API_SECRET_KEY    — bearer token for MCP server auth
+
+  "vars": {
+    "ENVIRONMENT": "production"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "wdtw",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:ui": "cd ui && PUBLIC_API_URL='' npm run build",
+    "build": "npm run build:ui",
+    "deploy": "npm run build && wrangler deploy",
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply wdtw-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply wdtw-db --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "drizzle-kit": "^0.30.4",
+    "typescript": "^5.7.3",
+    "wrangler": "^3.112.0"
+  },
+  "dependencies": {
+    "@cloudflare/agents": "^0.0.16",
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "drizzle-orm": "^0.38.4",
+    "zod": "^3.24.2"
+  }
+}

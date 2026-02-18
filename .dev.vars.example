@@ -1,0 +1,4 @@
+# Copy this to .dev.vars and fill in real values
+# NEVER commit .dev.vars
+GITHUB_TOKEN=ghp_YOUR_TOKEN_HERE
+API_SECRET_KEY=your-dev-secret-here

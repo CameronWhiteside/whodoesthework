@@ -1,0 +1,248 @@
+# MVP Implementation Progress
+# whodoesthe.work — Developer Intelligence Platform
+# Update this file whenever you START or COMPLETE a spec.
+# Agents running in parallel: check here before starting to avoid duplicate work.
+
+Last updated: 2026-02-18 (spec-09 Part B complete)
+
+## Legend
+  ✅ COMPLETE     — done, TypeScript compiles, tests/spot checks pass
+  🔄 IN PROGRESS  — agent actively working on this right now
+  🔓 READY        — all dependencies met, safe to start
+  ⏳ PENDING      — waiting on a dependency to complete
+  ❌ BLOCKED      — dependency explicitly failed / needs human attention
+
+## Execution waves (dependency order)
+  Wave 1:  spec-00                            ← RUNNING NOW
+  Wave 2:  spec-01                            ← starts after spec-00 ✅
+  Wave 3:  spec-02 ∥ spec-04                  ← starts after spec-01 ✅
+  Wave 4:  spec-05 ∥ spec-06 (shell)         ← starts after wave-3 ✅
+  Wave 5:  spec-07                            ← starts after spec-05 + spec-06 ✅
+  Wave 6:  spec-08 (E2E)                      ← starts after spec-07 ✅
+  UI runs throughout:
+           spec-09 Steps 1–4 (components)     ← RUNNING NOW (independent)
+           spec-09 Step 0   (Hono router)     ← starts after spec-08 ✅
+
+================================================================
+## SPEC STATUS
+================================================================
+
+### spec-00 — Scaffold + Zod Schemas + Constants
+Status:   ✅ COMPLETE
+Started:  2026-02-17
+Completed: 2026-02-18
+Note: Fixed @cloudflare/agents version (0.0.16), .nonneg() → .nonnegative() in all schemas
+Agent:    agent-spec-00
+Blocks:   spec-01 (and transitively everything else)
+Files to create:
+  package.json, tsconfig.json, drizzle.config.ts
+  .gitignore, .dev.vars.example
+  src/index.ts
+  src/types/env.ts
+  src/shared/constants.ts
+  src/schemas/contribution.ts
+  src/schemas/developer.ts
+  src/schemas/domain.ts
+  src/schemas/review.ts
+  src/schemas/queue.ts
+  src/schemas/mcp.ts
+  src/schemas/github.ts
+Gate: `npx tsc --noEmit` passes with zero errors
+
+----------------------------------------------------------------
+
+### spec-01 — D1 Schema + Drizzle Query Layer
+Status:   ✅ COMPLETE
+Started:  2026-02-17
+Completed: 2026-02-18
+Note: Agent (a606514) created all 3 files; drizzle-kit generate run by orchestrator (Bash denied in agent).
+      Migration: migrations/0000_absurd_marten_broadcloak.sql — 5 tables, tsc --noEmit PASS.
+Files created:
+  src/db/schema.ts      ← Drizzle table definitions (source of truth for D1)
+  src/db/client.ts      ← createDB(d1) factory
+  src/db/queries.ts     ← Queries class (all DB access)
+  migrations/0000_absurd_marten_broadcloak.sql
+
+----------------------------------------------------------------
+
+### spec-02 — GitHub Ingestion Pipeline
+Status:   ✅ COMPLETE
+Started:  2026-02-17
+Completed: 2026-02-18
+Parallel: Can run alongside spec-04
+Files created:
+  src/ingestion/durable-object.ts
+  src/ingestion/github-client.ts
+  src/ingestion/discovery.ts
+  src/ingestion/repo-filter.ts
+Note: spec-03 analysis functions are called inline from spec-02 durable object.
+      analyzeCommitDetail imported with try/catch guard — works with or without spec-03.
+
+----------------------------------------------------------------
+
+### spec-03 — Analysis Pure Functions
+Status:   ✅ COMPLETE
+Started:  2026-02-17
+Completed: 2026-02-18
+Files to create:
+  src/analysis/diff-parser.ts
+  src/analysis/complexity.ts
+  src/analysis/metrics.ts
+  src/analysis/file-classifier.ts
+Gate: All functions are pure (no I/O). Unit-testable in isolation.
+
+----------------------------------------------------------------
+
+### spec-04 — AI Classification
+Status:   ✅ COMPLETE
+Started:  2026-02-17
+Completed: 2026-02-18
+Files created:
+  src/classification/contribution-classifier.ts
+  src/classification/domain-tagger.ts
+
+----------------------------------------------------------------
+
+### spec-05 — Scoring Engine
+Status:   ✅ COMPLETE
+Started:  2026-02-17
+Completed: 2026-02-18
+Files created:
+  src/scoring/quality-score.ts
+  src/scoring/review-score.ts
+  src/scoring/doc-score.ts
+  src/scoring/collaboration.ts
+  src/scoring/consistency.ts
+  src/scoring/aggregate.ts
+  src/scoring/percentile.ts
+Note: All coefficients come from src/shared/constants.ts — never hardcode numbers.
+
+----------------------------------------------------------------
+
+### spec-06 — Vectorize Search
+Status:   ✅ COMPLETE
+Started:  2026-02-18
+Completed: 2026-02-18
+Note: Bash agent (a6198a5) had permission issues; files written by orchestrator directly. tsc PASS.
+Files created:
+  src/search/embeddings.ts
+  src/search/vector-store.ts
+  src/search/query-parser.ts
+
+----------------------------------------------------------------
+
+### spec-07 — MCP Server
+Status:   ✅ COMPLETE
+Started:  2026-02-18
+Completed: 2026-02-18
+Note: Shell from spec-07 agent (ac4a1cf) + real tool implementations by orchestrator. tsc PASS.
+Files created:
+  src/mcp/server.ts         ← Agent extends @cloudflare/agents Agent (not McpAgent — v0.0.16 only has Agent)
+  src/mcp/auth.ts           ← HMAC constant-time Bearer auth
+  src/mcp/tools/search-developers.ts   ← executeSearch + D1 hydration + AI explanations
+  src/mcp/tools/get-developer-profile.ts ← full DeveloperProfile + triggers ingestion if not found
+  src/mcp/tools/compare-developers.ts   ← side-by-side comparison + AI narrative
+
+----------------------------------------------------------------
+
+### spec-08 — End-to-End Integration + Deploy
+Status:   ✅ COMPLETE (code phase)
+Started:  2026-02-18
+Completed: 2026-02-18
+Files created/updated:
+  src/worker.ts        ← replaces src/index.ts; wires Hono router + MCP DO + ingestion DO
+  src/api/router.ts    ← Hono REST router: /health, /admin/ingest, /admin/ingest/status/:username, /admin/stats, /admin/classify, /admin/search
+  src/types/env.ts     ← added MCP_DO: DurableObjectNamespace binding
+  wrangler.jsonc       ← main changed to src/worker.ts; MCP_DO binding + WhodoestheworkMCP in migrations
+Note: tsc --noEmit passes with zero errors.
+      MCP routing uses env.MCP_DO.idFromName('default') — singleton DO instance.
+      routeAgentRequest() NOT used for /mcp + /sse (it expects /agents/<namespace>/<name> pattern).
+      Queue handler routes each message to INGESTION_DO sharded by username/developerId.
+      Scheduled handler triggers compute_scores via cron-trigger DO shard.
+HUMAN ACTION REQUIRED for deploy:
+  1. npx wrangler d1 create wdtw-db          (if not done — note database_id in wrangler.jsonc)
+  2. npx wrangler queues create wdtw-ingestion
+  3. npx wrangler queues create wdtw-ingestion-dlq
+  4. npx wrangler vectorize create wdtw-vectors --dimensions=384 --metric=cosine
+  5. npx wrangler d1 migrations apply wdtw-db --remote
+  6. npx wrangler secret put GITHUB_TOKEN
+  7. npx wrangler secret put API_SECRET_KEY
+  8. Update wrangler.jsonc database_id (TBD_AFTER_CREATION) with real D1 ID
+  9. npx wrangler deploy
+Gate: `wrangler deploy` succeeds; /health returns 200 on whodoesthe.work
+
+----------------------------------------------------------------
+
+### spec-09 — Svelte UI + Hono REST API
+#### Part A: SvelteKit UI scaffold (Steps 1–4)  ← RUNNING NOW
+Status:   ✅ COMPLETE (Steps 1–4)
+Started:  2026-02-17
+Completed: 2026-02-17
+Agent:    agent-spec-09-ui
+Files to create:
+  ui/                              ← SvelteKit project root
+  ui/svelte.config.js              ← adapter-cloudflare
+  ui/.env.local                    ← PUBLIC_API_URL=http://localhost:8787
+  ui/src/lib/api.ts
+  ui/src/lib/stores/SearchStore.ts
+  ui/src/lib/stores/ShortlistStore.ts
+  ui/src/lib/components/ScoreBar.svelte
+  ui/src/lib/components/Hero.svelte
+  ui/src/lib/components/MatchCard.svelte
+  ui/src/lib/components/ProjectForm.svelte
+Note: Use NEW light/editorial design tokens from spec-09 Visual Design Tokens section.
+      Do NOT copy old dark-mode CSS from the code blocks.
+
+#### Part B: Routes + Hono API (Steps 0 + 5–11)
+Status:   ✅ COMPLETE
+Started:  2026-02-18
+Completed: 2026-02-18
+Files created:
+  ui/src/routes/+layout.svelte           ← sticky nav, pixel-grid body, Plus Jakarta Sans font
+  ui/src/routes/+page.svelte             ← landing: Hero + ProjectForm + value props + stats bar
+  ui/src/routes/search/+page.svelte      ← 3-step form page (wraps ProjectForm, ?q= prefill)
+  ui/src/routes/matches/+page.svelte     ← results grid, calls searchMatches(), shortlist CTA
+  ui/src/routes/developer/[username]/+page.svelte  ← full profile, 6 ScoreBars, domain chips, evidence repos
+  ui/src/routes/shortlist/+page.svelte   ← localStorage shortlist, clear button, empty serif state
+Note: src/api/router.ts created by spec-08 agent.
+      All routes use light/editorial design tokens (#f5f2ed bg, #b8ff57 CTAs, #ede9fe lavender chips).
+      API calls use searchMatches() and getDeveloper() from ui/src/lib/api.ts (correct function names).
+      ShortlistStore.load() omitted — store self-initializes from localStorage on module load.
+
+================================================================
+## CRITICAL RULES (for all agents)
+================================================================
+
+1. READ your full spec before writing a single file.
+   Spec location: /Users/cameronwhiteside/whodoesthework/MVP/spec-XX-*.md
+
+2. NEVER hand-write TypeScript interfaces.
+   All types are z.infer<typeof schema> from src/schemas/*.ts
+
+3. NEVER write raw SQL. Use Drizzle ORM.
+   Exception: complex GROUP BY aggregations — annotate with // raw SQL comment
+
+4. NEVER put secrets in wrangler.jsonc.
+   Local: .dev.vars (gitignored). Production: wrangler secret put
+
+5. ALL Cloudflare resources use wdtw- prefix.
+
+6. Import from src/schemas/ — never duplicate type definitions.
+
+7. Update THIS FILE when you complete your spec:
+   - Change status to ✅ COMPLETE
+   - Add completion timestamp
+   - Change next spec(s) status to 🔓 READY
+
+================================================================
+## QUICK FILE MAP
+================================================================
+  All Zod schemas:              src/schemas/*.ts
+  D1 table definitions:         src/db/schema.ts
+  All tunable scoring values:   src/shared/constants.ts
+  Cloudflare bindings type:     src/types/env.ts
+  Hono REST router:             src/api/router.ts
+  MCP server:                   src/mcp/server.ts
+  Worker entrypoint:            src/worker.ts  (src/index.ts until spec-08)
+  SvelteKit UI:                 ui/
+  All fetch helpers + UI types: ui/src/lib/api.ts

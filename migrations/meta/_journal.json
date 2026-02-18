@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1771386621776,
+      "tag": "0000_absurd_marten_broadcloak",
+      "breakpoints": true
+    }
+  ]
+}
