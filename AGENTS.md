@@ -93,7 +93,7 @@ Read the full spec before implementing. These summaries are orientation, not sub
 | **spec-06** | Vectorize semantic search | Embeds developer domain profile text. `executeSearch(env, { query, limit })` is the public interface. Query expansion happens in spec-09 before calling this. |
 | **spec-07** | MCP server (Agents SDK) | `authenticate()` checks Bearer token against `API_SECRET_KEY` env secret (constant-time). No D1 auth table. AI-generated `match_explanation` via Workers AI Promise.all(). |
 | **spec-08** | End-to-end integration + deploy | Wires all specs together. Seed D1 with real ingested developers before demo. |
-| **spec-09** | Vamo-style web UI + Hono REST API | Public endpoints (no auth). Shortlist is localStorage only. Query expansion via Workers AI before Vectorize. `GET /api/domains` powers live domain chips. |
+| **spec-09** | Vamo-style web UI + Hono REST API | Public endpoints (no auth). No shortlist — removed from scope. Query expansion via Workers AI before Vectorize. `GET /api/domains` powers live domain chips. `GET /admin/stats` powers live index counts. |
 
 Execution order: `spec-00 → spec-01 → [spec-02 + spec-03 + spec-04 in parallel] → spec-05 → spec-06 → spec-07 → spec-08 → spec-09`
 
@@ -196,16 +196,15 @@ src/
 ui/src/
 ├── routes/          — SvelteKit file-based routing
 │   ├── +layout.svelte
-│   ├── +page.svelte         ← landing
-│   ├── search/+page.svelte  ← 3-step form
-│   ├── matches/+page.svelte ← results grid
-│   ├── developer/[username]/+page.svelte
-│   └── shortlist/+page.svelte
+│   ├── +page.svelte                      ← one-pager: hero + search form + pipeline + live index + MCP teaser
+│   ├── search/+page.svelte               ← alias/fallback for /#find
+│   ├── matches/+page.svelte              ← results grid
+│   ├── developer/[username]/+page.svelte ← profile deep-dive
+│   └── mcp/+page.svelte                 ← MCP server documentation
 └── lib/
     ├── api.ts               ← ALL fetch helpers + TypeScript types for API responses
     ├── stores/
-    │   ├── SearchStore.ts   ← writable<SearchRequest | null>
-    │   └── ShortlistStore.ts ← localStorage-backed writable<MatchResult[]>
+    │   └── SearchStore.ts   ← writable<SearchRequest | null>
     └── components/
         ├── Hero.svelte
         ├── ProjectForm.svelte
@@ -331,15 +330,10 @@ for (const dev of developers) {
 
 ```typescript
 // Cross-page state: Svelte writable stores (NOT URL params, NOT sessionStorage)
-// SearchStore: carries form state from /search → /matches
-// ShortlistStore: localStorage-backed, sync operations only
+// SearchStore: carries form state from homepage search form → /matches
 
 // ✅ Correct
 import { pendingSearch } from "$lib/stores/SearchStore";
-import { shortlistStore } from "$lib/stores/ShortlistStore";
-
-shortlistStore.add(match); // sync, no await
-shortlistStore.remove(username); // sync, no await
 ```
 
 ### Data loading
@@ -353,7 +347,7 @@ onMount(async () => {
 // Redirect guard — always check store before making API calls
 onMount(() => {
   if (!$pendingSearch) {
-    goto("/search");
+    goto("/#find");
     return;
   }
   // ...
@@ -495,11 +489,11 @@ When the 5-minute demo ends, the viewer should walk away believing:
 ## Things you must not do
 
 - **Do not add auth to the web UI.** No login, no sessions, no API keys for the demo. The web endpoints are public.
-- **Do not store shortlist state on the server.** It lives in localStorage.
+- **Do not re-add a shortlist feature.** Shortlist was intentionally removed to keep the demo tight. `ShortlistStore.ts` and `/shortlist` route are deleted — do not recreate them.
 - **Do not use external LLMs or databases.** Workers AI and D1 only.
 - **Do not write TypeScript interfaces by hand.** Use `z.infer<typeof schema>`.
 - **Do not write raw SQL.** Use Drizzle (exception: complex aggregations with a comment).
-- **Do not add unnecessary loading states.** Sync operations (shortlist) should not have spinners.
+- **Do not add unnecessary loading states.** Spinners are for network calls only.
 - **Do not add comments to obvious code.** Only comment non-obvious decisions, calibration choices, and anything that differs from what a reader would expect.
 - **Do not add features not in the specs.** The demo is scoped. Every extra feature is a demo risk.
 - **Do not pattern-match to other frameworks.** This is not Next.js. Not Express. Cloudflare Workers and SvelteKit have their own patterns — follow the specs.
