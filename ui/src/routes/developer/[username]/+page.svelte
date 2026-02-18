@@ -34,7 +34,7 @@
 <div class="page">
   <div class="back-nav">
     {#if $pendingSearch}
-      <a href="/matches" class="back-link">← Back to matches</a>
+      <a href="/#results" class="back-link">← Back to results</a>
     {:else}
       <a href="/" class="back-link">← Home</a>
     {/if}
@@ -156,13 +156,13 @@
 
   .back-link {
     font-size: 0.85rem;
-    color: #8a8070;
+    color: var(--color-link);
     text-decoration: none;
     transition: color 0.15s;
   }
 
   .back-link:hover {
-    color: #2563eb;
+    color: var(--color-link-hover);
   }
 
   .loading {
@@ -184,7 +184,7 @@
 
   .loading-text {
     font-size: 1rem;
-    color: #8a8070;
+    color: var(--color-muted);
     margin: 0;
   }
 
@@ -210,8 +210,8 @@
   .btn-primary {
     display: inline-block;
     padding: 0.625rem 1.5rem;
-    background: #b8ff57;
-    color: #1a3300;
+    background: var(--color-accent);
+    color: var(--color-on-accent);
     border-radius: 8px;
     font-size: 0.9rem;
     font-weight: 700;
@@ -236,7 +236,7 @@
   .identity h1 {
     font-size: clamp(1.75rem, 4vw, 2.5rem);
     font-weight: 900;
-    color: #0a0907;
+    color: var(--color-text);
     margin: 0 0 0.375rem;
     letter-spacing: -0.03em;
     line-height: 1;
@@ -244,13 +244,13 @@
 
   .gh-link {
     font-size: 0.875rem;
-    color: #2563eb;
+    color: var(--color-link);
     text-decoration: none;
     transition: color 0.15s;
   }
 
   .gh-link:hover {
-    color: #1d4ed8;
+    color: var(--color-link-hover);
   }
 
   .hero-right {
@@ -270,18 +270,21 @@
   .impact-num {
     font-size: 3rem;
     font-weight: 900;
-    color: #b8ff57;
+    color: var(--color-text);
     line-height: 1;
     font-variant-numeric: tabular-nums;
     /* Green on light bg — use text stroke trick for readability */
-    -webkit-text-stroke: 0.5px #1a3300;
-    text-shadow: 0 1px 2px rgba(26,51,0,0.15);
+    background: linear-gradient(var(--color-accent), var(--color-accent));
+    padding: 0.05em 0.12em;
+    border-radius: 12px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
 
   .impact-label {
     font-size: 0.65rem;
     font-weight: 700;
-    color: #8a8070;
+    color: var(--color-muted);
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
@@ -293,7 +296,7 @@
   .section-title {
     font-size: 0.75rem;
     font-weight: 700;
-    color: #8a8070;
+    color: var(--color-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0 0 1rem;
@@ -338,8 +341,8 @@
   }
 
   .scores {
-    background: #ffffff;
-    border: 1.5px solid #ddd8d0;
+    background: rgba(255,255,255,0.78);
+    border: var(--b-1) solid rgba(184,176,165,0.65);
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
   }
@@ -351,8 +354,8 @@
   }
 
   .domain-card {
-    background: #ede9fe;
-    border: 1px solid #c4b5fd;
+    background: var(--color-category);
+    border: var(--b-1) solid var(--color-category-border);
     border-radius: 8px;
     padding: 0.875rem;
     display: flex;
@@ -362,20 +365,20 @@
 
   .domain-name {
     font-size: 0.875rem;
-    color: #5b21b6;
+    color: var(--color-on-category);
     font-weight: 600;
   }
 
   .domain-score {
     font-size: 1.25rem;
     font-weight: 800;
-    color: #4c1d95;
+    color: var(--color-text);
     font-variant-numeric: tabular-nums;
   }
 
   .domain-count {
     font-size: 0.7rem;
-    color: #7c3aed;
+    color: var(--color-muted);
     opacity: 0.75;
   }
 
@@ -388,18 +391,18 @@
   .evidence-link {
     display: inline-block;
     padding: 0.3rem 0.875rem;
-    background: #ffffff;
-    border: 1.5px solid #ddd8d0;
+    background: rgba(255,255,255,0.78);
+    border: var(--b-1) solid rgba(184,176,165,0.65);
     border-radius: 6px;
     font-size: 0.8rem;
-    color: #2563eb;
+    color: var(--color-link);
     text-decoration: none;
     font-family: 'SFMono-Regular', Consolas, monospace;
     transition: border-color 0.15s, background 0.15s;
   }
 
   .evidence-link:hover {
-    border-color: #2563eb;
-    background: rgba(37,99,235,0.04);
+    border-color: var(--color-link);
+    background: rgba(231,242,255,0.75);
   }
 </style>

@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-  <title>Find Engineers — whodoesthe.work</title>
+  <title>Search — whodoesthe.work</title>
 </svelte:head>
 
 <div class="page">
@@ -19,29 +19,8 @@
 
 <style>
   .page {
-    max-width: 640px;
+    max-width: 60rem;
     margin: 0 auto;
-    padding: 3.5rem 1.5rem;
-  }
-
-  .header {
-    text-align: center;
-    margin-bottom: 2.5rem;
-  }
-
-  h1 {
-    font-size: clamp(1.75rem, 3.5vw, 2.5rem);
-    font-weight: 900;
-    color: #0a0907;
-    margin: 0 0 0.5rem;
-    letter-spacing: -0.03em;
-    line-height: 0.95;
-  }
-
-  p {
-    color: #8a8070;
-    font-size: 1rem;
-    margin: 0;
-    line-height: 1.6;
+    padding: var(--sp-7) var(--sp-5);
   }
 </style>

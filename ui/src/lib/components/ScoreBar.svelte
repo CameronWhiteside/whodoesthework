@@ -26,8 +26,8 @@
     font-size: 0.8rem;
     margin-bottom: 0.2rem;
   }
-  .label { color: #8a8070; }
-  .value { font-weight: 600; color: #3d3830; }
-  .track { background: #e8e4df; border-radius: 4px; overflow: hidden; }
+  .label { color: var(--color-muted); }
+  .value { font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+  .track { background: rgba(11,10,8,0.08); border-radius: 4px; overflow: hidden; }
   .fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 </style>

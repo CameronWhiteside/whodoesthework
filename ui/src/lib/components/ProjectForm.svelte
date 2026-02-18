@@ -2,7 +2,8 @@
   import { createEventDispatcher } from 'svelte';
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
-  import type { SearchRequest } from '$lib/api';
+  import MatchCard from '$lib/components/MatchCard.svelte';
+  import type { MatchResult, SearchRequest } from '$lib/api';
   import { selectionHandles } from '$lib/actions/selectionHandles';
 
   const dispatch = createEventDispatcher<{ submit: SearchRequest }>();
@@ -10,12 +11,18 @@
   import { getDomains, type DomainEntry } from '$lib/api';
 
   export let initialDescription = '';
+  export let results: MatchResult[] = [];
+  export let loading = false;
+  export let error = '';
 
   // Languages are fixed — these are well-known and don't change.
   const LANGUAGES = [
     'Rust', 'Go', 'TypeScript', 'Python', 'Java', 'C++', 'C#', 'Ruby',
     'Scala', 'Kotlin', 'Swift', 'Elixir', 'Haskell', 'Zig',
     'React', 'Next.js', 'SvelteKit', 'Vue', 'Node.js', 'PostgreSQL',
+    'Cloudflare', 'Durable Objects', 'Queues', 'D1',
+    'Vector search', 'Semantic search', 'AI Agents', 'MCP',
+    'Observability',
   ];
 
   // Domain chips are loaded from GET /api/domains — only shows domains with
@@ -26,7 +33,7 @@
   // Combined stack selection: languages + domains in same chip grid
   $: STACKS = [
     ...LANGUAGES,
-    ...domainChips.slice(0, 12).map(d => d.domain),
+    ...domainChips.slice(0, 16).map(d => d.domain),
   ];
 
   onMount(async () => {
@@ -45,6 +52,20 @@
 
   let reducedMotion = false;
   let descTouched = false;
+
+  const SAMPLE_QUERIES = [
+    'Distributed systems (Go/Rust), consensus + storage',
+    'React/TypeScript, design systems + component architecture',
+    'ML infrastructure (Python/CUDA), training pipelines',
+    'Backend APIs, Postgres at scale, migrations + perf',
+  ];
+
+  function prefill(query: string) {
+    description = query;
+    descTouched = false;
+  }
+
+  // `initialDescription` is a one-time prefill (e.g. from URL).
 
   $: descOk = description.trim().length >= 20;
   $: descCount = description.trim().length;
@@ -81,6 +102,9 @@
       role: selectedRole,
       limit: 10,
     });
+
+    direction = 'next';
+    step = 4;
   }
 
   onMount(() => {
@@ -88,50 +112,48 @@
   });
 </script>
 
-<form class="form" on:submit|preventDefault={() => step === 3 && submit()}>
-  <!-- Progress dots -->
-  <div class="steps">
-    {#each [1, 2, 3] as s}
-      <div class="dot" class:active={step === s} class:done={step > s} />
-      {#if s < 3}<div class="line" class:done={step > s} />{/if}
-    {/each}
-  </div>
+<form
+  class="form"
+  style={`--actions-h:${step === 1 ? '0px' : '56px'}`}
+  on:submit|preventDefault={() => step === 3 && submit()}
+>
+  <div class="stage" aria-label="Search builder">
+    {#key step}
+      {#if step === 1}
+        <div class="step step--1" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
+          <label class="field-label" for="wdtw-desc">Project</label>
 
-  {#key step}
-    {#if step === 1}
-      <div class="step" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
-        <h2>What are you building?</h2>
-        <p class="hint-top">Enough detail to answer the only question that matters: who does the work?</p>
+          <div class="try" aria-label="Example queries">
+            {#each SAMPLE_QUERIES as q}
+              <button type="button" class="chip" on:click={() => prefill(q)}>{q}</button>
+            {/each}
+          </div>
 
-        <label class="field-label" for="wdtw-desc">Project</label>
-        <textarea
-          id="wdtw-desc"
-          bind:value={description}
-          aria-describedby="wdtw-desc-help wdtw-desc-count"
-          aria-invalid={descTouched && !descOk}
-          placeholder="Example: Real-time payment settlement. Need Rust/Go, distributed transactions, idempotency, replay safety, and operational maturity."
-          rows={5}
-        />
-        <p class="help" id="wdtw-desc-help">Include constraints: throughput, latency, data model, correctness, and ops surface area.</p>
-        <div class="desc-hint" class:ok={descOk} id="wdtw-desc-count">
-          {descOk ? 'Good signal.' : `Add ${Math.max(0, 20 - descCount)} more characters for better query expansion.`}
+          <textarea
+            id="wdtw-desc"
+            bind:value={description}
+            aria-describedby="wdtw-desc-count"
+            aria-invalid={descTouched && !descOk}
+            placeholder="Example: Real-time payment settlement. Need Rust/Go, distributed transactions, idempotency, replay safety, and operational maturity."
+            rows={5}
+          />
+
+          <div class="step1-actions" aria-label="Step 1 actions">
+            <div class="desc-hint" class:ok={descOk} id="wdtw-desc-count">
+              {descOk ? 'Good signal.' : `Add ${Math.max(0, 20 - descCount)} more characters for better query expansion.`}
+            </div>
+            <button class="btn btn--accent" type="button" on:click={next} disabled={!descOk}>Next</button>
+          </div>
         </div>
 
-        <button class="btn btn--accent" type="button" on:click={next}>
-          Next: constraints →
-        </button>
-      </div>
-
-    {:else if step === 2}
-      <div class="step" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
-        <h2>Constraints (optional)</h2>
-        <p class="hint-top">Nudge the search. Leave blank if you want the best “who does the work?” answer regardless of stack.</p>
-
-        <fieldset class="fieldset">
-          <legend class="legend">Stack + domains</legend>
-          <div class="chip-grid" aria-label="Stack constraints">
-            {#each STACKS as s}
-              <label class="stack-chip" class:selected={selectedStacks.includes(s)}>
+      {:else if step === 2}
+        <div class="step" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
+          <fieldset class="fieldset">
+            <legend class="legend">Stack + domains</legend>
+            <p class="hint-top">Nudge the search. Leave blank if you want the best answer regardless of stack.</p>
+            <div class="chip-grid" aria-label="Stack constraints">
+              {#each STACKS as s}
+                <label class="stack-chip" class:selected={selectedStacks.includes(s)}>
                 <input
                   type="checkbox"
                   checked={selectedStacks.includes(s)}
@@ -143,18 +165,12 @@
           </div>
         </fieldset>
 
-        <div class="btn-row">
-          <button class="btn btn--ghost" type="button" on:click={back}>← Back</button>
-          <button class="btn btn--accent" type="button" on:click={next}>Next: role →</button>
         </div>
-      </div>
 
-    {:else}
-      <div class="step" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
-        <h2>Target role</h2>
-
-        <fieldset class="fieldset">
-          <legend class="legend">Role</legend>
+      {:else if step === 3}
+        <div class="step" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
+          <fieldset class="fieldset">
+            <legend class="legend">Role</legend>
           <div class="role-grid" role="radiogroup" aria-label="Target role">
             {#each ROLES as r}
               <label
@@ -176,31 +192,91 @@
           </div>
         </fieldset>
 
-        <div class="btn-row">
-          <button class="btn btn--ghost" type="button" on:click={back}>← Back</button>
-          <button class="btn btn--accent" type="submit" disabled={!selectedRole}>
-            Show me who →
-          </button>
         </div>
+
+      {:else}
+        <div class="step" id="results" in:fly={{ x: xIn, y: 6, duration: dur }} out:fly={{ x: xOut, y: -6, duration: dur }}>
+          {#if loading}
+            <p class="status" role="status" aria-live="polite"><span class="accent-serif"><em>Searching…</em></span></p>
+          {:else if error}
+            <p class="error-title">Search failed</p>
+            <pre class="error-text mono">{error}</pre>
+          {:else if results.length > 0}
+            <p class="count"><span class="mono">{results.length}</span> match{results.length !== 1 ? 'es' : ''}</p>
+            <div class="cardlist" role="region" aria-label="Search results">
+              {#each results as match, i}
+                <MatchCard {match} rank={i + 1} />
+              {/each}
+            </div>
+          {:else}
+            <p class="status">No results.</p>
+          {/if}
+        </div>
+      {/if}
+    {/key}
+
+    {#if step !== 1}
+      <div class="actions" aria-label="Form actions">
+        {#if step === 2}
+          <button class="btn btn--ghost" type="button" on:click={back}>← Back</button>
+          <button class="btn btn--accent" type="button" on:click={next}>Next</button>
+        {:else if step === 3}
+          <button class="btn btn--ghost" type="button" on:click={back}>← Back</button>
+          <button class="btn btn--accent" type="submit" disabled={!selectedRole}>Search</button>
+        {:else}
+          <button class="btn btn--ghost" type="button" on:click={() => { direction = 'back'; step = 3; }}>← Back</button>
+        {/if}
       </div>
     {/if}
-  {/key}
+  </div>
 </form>
 
 <style>
-  .form { max-width: 580px; margin: 0 auto; }
-  .steps { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 2.5rem; }
-  .dot {
-    width: 12px; height: 12px; border-radius: 50%;
-    background: transparent; border: 2px solid var(--color-border);
-    transition: background 0.2s, border-color 0.2s;
+  .form {
+    --actions-h: 56px;
+    max-width: 58rem;
+    margin: 0;
   }
-  .dot.active { background: var(--color-brand); border-color: var(--color-brand); }
-  .dot.done { background: var(--color-accent); border-color: var(--color-accent); }
-  .line { flex: 1; height: 2px; background: var(--color-border); max-width: 48px; }
-  .line.done { background: var(--color-accent); }
+
+  .stage {
+    position: relative;
+    padding-bottom: calc(var(--actions-h) + var(--sp-4));
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .actions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--actions-h);
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--sp-3);
+    padding-top: var(--sp-3);
+  }
+
+  .step--1 {
+    gap: 0.75rem;
+  }
+
+  .step1-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  .step1-actions .desc-hint {
+    flex: 1;
+    min-width: 18rem;
+  }
+
   .step { display: flex; flex-direction: column; gap: 1rem; }
-  h2 { font-size: var(--text-h2); font-weight: 700; color: var(--color-text); margin: 0; }
   .hint-top { color: var(--color-muted); font-size: 1rem; margin: 0; max-width: 60ch; }
 
   .field-label {
@@ -220,8 +296,6 @@
   textarea:focus { border-color: var(--color-brand); }
   textarea[aria-invalid='true'] { border-color: var(--color-danger-ink); }
 
-  .help { margin: 0; font-size: 0.95rem; color: var(--color-muted); line-height: 1.6; }
-
   .desc-hint { font-size: 0.85rem; color: var(--color-muted); }
   .desc-hint.ok { color: var(--color-on-accent); }
 
@@ -233,6 +307,11 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-bottom: 0.5rem;
+  }
+
+  .hint-top {
+    margin-top: 0.25rem;
+    margin-bottom: 0.75rem;
   }
 
   .chip-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -297,6 +376,76 @@
     margin: 0;
   }
 
-  .btn-row { display: flex; gap: var(--sp-3); justify-content: flex-end; }
   :global(.btn:disabled) { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+  .status { margin: 0; color: var(--color-muted); }
+
+  .count {
+    margin: var(--sp-2) 0 0;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+  }
+
+  .cardlist {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    margin-top: var(--sp-4);
+    overflow: auto;
+    padding-right: 0.25rem;
+    max-height: min(420px, 46vh);
+  }
+
+  .error-title {
+    margin: 0 0 var(--sp-2);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .error-text {
+    margin: 0;
+    border: var(--b-1) solid rgba(184,176,165,0.70);
+    border-radius: var(--r-1);
+    background: rgba(255,255,255,0.75);
+    padding: var(--sp-3) var(--sp-4);
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    white-space: pre-wrap;
+  }
+
+  .try {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    display: inline-block;
+    background: rgba(255,255,255,0.75);
+    border: var(--b-1) solid rgba(184, 176, 165, 0.75);
+    color: var(--color-text-2);
+    border-radius: 999px;
+    padding: 0.32rem 0.8rem;
+    font-size: 0.85rem;
+    transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    background: rgba(238,233,255,0.85);
+    border-color: rgba(58, 42, 120, 0.25);
+    color: var(--color-on-category);
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 540px) {
+    .form { --actions-h: 56px; }
+    .cardlist { max-height: min(460px, 50vh); }
+  }
 </style>

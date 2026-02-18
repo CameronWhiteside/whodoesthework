@@ -1,7 +1,3 @@
-<script lang="ts">
-  import { page } from '$app/stores';
-</script>
-
 <svelte:head>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link
@@ -12,19 +8,18 @@
 
 <div class="app">
   <a class="skip-link" href="#main">Skip to content</a>
-  <nav>
-    <a href="/" class="brand">whodoesthe.work</a>
-    <div class="nav-links">
-      <a
-        href="/#find"
-        class:active={$page.url.pathname === '/'}
-        aria-current={$page.url.pathname === '/' ? 'page' : undefined}
-      >
-        Search
-      </a>
-      <a href="/#mcp">MCP</a>
+
+  <header class="nav" aria-label="Primary">
+    <div class="nav-inner mono">
+      <a class="nav-item brand" href="/#find">WHODOESTHE.WORK</a>
+      <span class="sep" aria-hidden="true">|</span>
+      <a class="nav-item" href="https://github.com/CameronWhiteside/whodoesthework" target="_blank" rel="noopener">GITHUB</a>
+      <span class="sep" aria-hidden="true">|</span>
+      <a class="nav-item" href="/#mcp">MCP</a>
     </div>
-  </nav>
+  </header>
+
+  <div class="bg" aria-hidden="true" />
   <main id="main">
     <slot />
   </main>
@@ -119,6 +114,19 @@
     -webkit-font-smoothing: antialiased;
     background-attachment: fixed;
   }
+
+  :global(body)::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(11,10,8,0.05) 0, rgba(11,10,8,0.05) 1px, transparent 1px, transparent 34px),
+      repeating-linear-gradient(90deg, rgba(11,10,8,0.04) 0, rgba(11,10,8,0.04) 1px, transparent 1px, transparent 34px);
+    opacity: 0.28;
+    mix-blend-mode: multiply;
+    z-index: -1;
+  }
   :global(a) { color: inherit; }
   :global(h1, h2, h3, h4) {
     font-family: var(--font-sans);
@@ -204,6 +212,23 @@
     transform: translateY(-1px);
   }
 
+  :global(.accent-tag) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.9rem;
+    font-size: var(--text-meta-sm);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-link);
+    background: rgba(29, 78, 216, 0.07);
+    border: var(--b-1) solid rgba(29, 78, 216, 0.35);
+    border-radius: var(--r-1);
+    width: fit-content;
+    text-decoration: none;
+  }
+
   :global(.mosaic-frame) {
     background-image:
       url('/mosaic-corner.svg'),
@@ -221,9 +246,9 @@
     height: var(--wdtw-handle-size, 8px);
     background: var(--color-brand);
     border-radius: 2px;
-    opacity: 0;
-    transform: translate(2px, 2px);
-    transition: opacity var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+    opacity: 0.55;
+    transform: translate(0, 0);
+    transition: opacity var(--dur-1) var(--ease-out);
     pointer-events: none;
     z-index: 5;
   }
@@ -237,7 +262,6 @@
   :global(.wdtw-handle-host:focus-visible .wdtw-handle),
   :global(.wdtw-handle-host[data-handles='on'] .wdtw-handle) {
     opacity: 1;
-    transform: translate(0, 0);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -245,6 +269,25 @@
   }
 
   .app { min-height: 100vh; }
+
+  .bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(650px 420px at 18% 15%, rgba(238,233,255,0.60) 0%, transparent 60%),
+      radial-gradient(700px 420px at 82% 18%, rgba(231,242,255,0.65) 0%, transparent 62%);
+    opacity: 0.7;
+    z-index: 0;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    min-height: calc(100vh - 1px);
+    padding-left: clamp(12px, 3vw, 28px);
+    padding-right: clamp(12px, 3vw, 28px);
+  }
 
   .skip-link {
     position: absolute;
@@ -265,48 +308,63 @@
     transform: translateY(0);
   }
 
-  nav {
+  .nav {
     position: sticky;
     top: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 60px;
-    padding: 0 2rem;
-    background: rgba(246,241,234,0.78);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    z-index: 200;
+    background: var(--color-bg);
     border-bottom: 1px solid var(--color-border);
   }
 
+  .nav-inner {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: var(--sp-3) var(--sp-5);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 540px) {
+    main {
+      padding-left: 0;
+      padding-right: 0;
+    }
+  }
+
+  .nav-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    font-size: 0.8rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--color-text-2);
+    padding: 0.15rem 0;
+  }
+
   .brand {
-    font-size: 1rem;
     font-weight: 800;
     color: var(--color-text);
-    text-decoration: none;
-    letter-spacing: -0.01em;
   }
 
-  .nav-links {
-    display: flex;
-    gap: 1.5rem;
-    align-items: center;
+  .sep {
+    color: var(--color-border-strong);
+    user-select: none;
   }
 
-  .nav-links a {
-    font-size: 0.9rem;
-    color: var(--color-text-2);
-    text-decoration: none;
-    transition: color 0.15s;
+  .nav-item:hover,
+  .nav-item:focus-visible {
+    color: var(--color-link);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
-  .nav-links a:hover,
-  .nav-links a.active {
-    color: var(--color-text);
-  }
-
-  main {
-    min-height: calc(100vh - 60px);
+  :global(#find),
+  :global(#mcp),
+  :global(#results) {
+    scroll-margin-top: 4.5rem;
   }
 </style>
