@@ -1,9 +1,13 @@
+<script lang="ts">
+  import { selectionHandles } from '$lib/actions/selectionHandles';
+</script>
+
 <section class="mcp" id="mcp">
   <div class="content">
     <h2>Agent tools</h2>
 
     <div class="row">
-      <span class="subhead">Endpoint</span>
+      <span class="subhead motif-box mono" use:selectionHandles data-handles="on">ENDPOINT</span>
       <span class="pill mono">https://whodoesthe.work/mcp</span>
     </div>
 
@@ -16,8 +20,7 @@
   }
 }`}</pre>
 
-    <p class="subhead">Tools</p>
-    <p class="note">JSON arguments, JSON output.</p>
+    <p class="subhead motif-box mono" use:selectionHandles data-handles="on">TOOLS</p>
 
     <div class="tool">
       <h3 class="tool-name mono">search_developers</h3>
@@ -169,6 +172,13 @@
     color: var(--color-text);
   }
 
+  .subhead.motif-box {
+    color: var(--color-link);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: var(--text-meta-sm);
+  }
+
   .row {
     display: flex;
     align-items: center;
@@ -192,11 +202,9 @@
 
   .copy { margin: 0 0 var(--sp-3); color: var(--color-text-2); }
 
-  .note { margin: 0; color: var(--color-muted); font-size: 0.95rem; }
-
-  .tool {
-    display: flex;
-    flex-direction: column;
+   .tool {
+     display: flex;
+     flex-direction: column;
     gap: var(--sp-3);
     padding-top: var(--sp-5);
     border-top: 1px solid rgba(231,225,216,0.8);

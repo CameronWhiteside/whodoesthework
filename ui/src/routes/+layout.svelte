@@ -229,6 +229,20 @@
     text-decoration: none;
   }
 
+  /* Blue bounding-box motif (shared) */
+  :global(.motif-box) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.65rem;
+    font-weight: 700;
+    color: var(--color-link);
+    background: rgba(29, 78, 216, 0.07);
+    border: var(--b-1) solid rgba(29, 78, 216, 0.35);
+    border-radius: var(--r-1);
+    width: fit-content;
+  }
+
   :global(.mosaic-frame) {
     background-image:
       url('/mosaic-corner.svg'),

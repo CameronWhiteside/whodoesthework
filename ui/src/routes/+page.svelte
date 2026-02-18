@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Hero from '$lib/components/Hero.svelte';
   import McpDocs from '$lib/components/McpDocs.svelte';
+  import { selectionHandles } from '$lib/actions/selectionHandles';
   import { pendingSearch } from '$lib/stores/SearchStore';
   import { getStats, getDomains, searchMatches, type PlatformStats, type DomainEntry, type MatchResult } from '$lib/api';
   import type { SearchRequest } from '$lib/api';
@@ -75,22 +76,30 @@
     <div class="steps">
       <div class="step">
         <div class="num mono">01</div>
-        <h3>Ingest (DO + Queue)</h3>
+        <h3>
+          <span class="motif-box mono" use:selectionHandles data-handles="on">Ingest (DO + Queue)</span>
+        </h3>
         <p>Per-developer Durable Objects fetch commits, PRs, reviews, and repo metadata from the GitHub API, then fan out work via Queues.</p>
       </div>
       <div class="step">
         <div class="num mono">02</div>
-        <h3>Analyze diffs</h3>
+        <h3>
+          <span class="motif-box mono" use:selectionHandles data-handles="on">Analyze diffs</span>
+        </h3>
         <p>We parse patches and compute churn, change spread, entropy, and complexity deltas, plus file-type splits (src/test/docs/infra).</p>
       </div>
       <div class="step">
         <div class="num mono">03</div>
-        <h3>Tag domains</h3>
+        <h3>
+          <span class="motif-box mono" use:selectionHandles data-handles="on">Tag domains</span>
+        </h3>
         <p>GitHub repo topics are the highest-confidence domain signal; Workers AI fills gaps with normalized, evidence-backed domain tags.</p>
       </div>
       <div class="step">
         <div class="num mono">04</div>
-        <h3>Score + index</h3>
+        <h3>
+          <span class="motif-box mono" use:selectionHandles data-handles="on">Score + index</span>
+        </h3>
         <p>We score contributions (effort × quality), aggregate into developer dimensions in D1, and embed profiles into Vectorize for intent search + rerank.</p>
       </div>
     </div>
@@ -121,6 +130,12 @@
     font-size: 1.125rem;
     font-weight: 700;
     color: var(--color-text);
+  }
+
+  .pipeline .step .motif-box {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: var(--text-meta-sm);
   }
 
   .pipeline {

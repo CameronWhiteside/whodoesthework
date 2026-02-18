@@ -83,7 +83,6 @@ src/
     query-parser.ts          Semantic search + SQL filter pipeline
   mcp/
     server.ts                WhodoestheworkMCP DO (Agents SDK + MCP SDK)
-    auth.ts                  Bearer token (constant-time comparison)
     tools/
       search-developers.ts
       get-developer-profile.ts
@@ -230,7 +229,7 @@ All admin endpoints are unauthenticated — intended for local use / curl.
 /sse   — MCP over SSE
 ```
 
-Three tools: `search_developers`, `get_developer_profile`, `compare_developers`. Bearer token auth via `API_SECRET_KEY`.
+Three tools: `search_developers`, `get_developer_profile`, `compare_developers`.
 
 ---
 
@@ -308,7 +307,7 @@ cd ui && npm install && cd ..
 
 # 3. Create local secrets file (gitignored)
 cp .dev.vars.example .dev.vars
-# Edit .dev.vars with your GITHUB_TOKEN and API_SECRET_KEY
+# Edit .dev.vars with your GITHUB_TOKEN
 
 # 4. Create D1 database (first time only)
 npx wrangler d1 create wdtw-db
@@ -342,7 +341,6 @@ Secrets are set once via wrangler and stored encrypted in Cloudflare — never i
 
 ```bash
 npx wrangler secret put GITHUB_TOKEN
-npx wrangler secret put API_SECRET_KEY
 
 # Verify
 npx wrangler secret list
@@ -355,7 +353,6 @@ npx wrangler secret list
 | Name | Where | Description |
 |---|---|---|
 | `GITHUB_TOKEN` | Cloudflare secret | PAT with `read:user`, `public_repo` scopes. Used by ingestion to fetch commits and PRs. |
-| `API_SECRET_KEY` | Cloudflare secret | Bearer token for MCP server auth. Generate with `openssl rand -hex 32`. |
 | `ENVIRONMENT` | `wrangler.jsonc` vars | `production` — non-secret config. |
 
 Never put secret values in `wrangler.jsonc`. The `vars` section is for non-secret config only.
@@ -395,10 +392,7 @@ Connect any MCP-compatible client (Claude Desktop, Cursor, etc.):
 {
   "mcpServers": {
     "whodoesthework": {
-      "url": "https://whodoesthe.work/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_SECRET_KEY"
-      }
+      "url": "https://whodoesthe.work/mcp"
     }
   }
 }
