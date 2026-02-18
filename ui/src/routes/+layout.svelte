@@ -1,8 +1,5 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { shortlistStore } from '$lib/stores/ShortlistStore';
-
-  $: shortlistCount = $shortlistStore.length;
 </script>
 
 <svelte:head>
@@ -21,9 +18,6 @@
         Find Engineers
       </a>
       <a href="/mcp" class:active={$page.url.pathname === '/mcp'}>MCP</a>
-      <a href="/shortlist" class:active={$page.url.pathname === '/shortlist'}>
-        Shortlist{shortlistCount > 0 ? ` (${shortlistCount})` : ''}
-      </a>
     </div>
   </nav>
   <main>

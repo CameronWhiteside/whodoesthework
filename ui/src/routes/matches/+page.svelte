@@ -40,8 +40,7 @@
         {/if}
       </div>
       <div class="header-actions">
-        <a href="/#find" class="refine-link">Refine search</a>
-        <a href="/shortlist" class="shortlist-link">View shortlist →</a>
+        <a href="/#find" class="refine-link">Refine search ↗</a>
       </div>
     </div>
   {/if}
@@ -125,17 +124,6 @@
 
   .refine-link:hover {
     color: #0a0907;
-  }
-
-  .shortlist-link {
-    font-size: 0.85rem;
-    color: #2563eb;
-    text-decoration: none;
-    transition: color 0.15s;
-  }
-
-  .shortlist-link:hover {
-    color: #1d4ed8;
   }
 
   .result-count {

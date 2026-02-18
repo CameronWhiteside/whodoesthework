@@ -53,9 +53,6 @@ export async function getDeveloper(username: string): Promise<DeveloperProfile> 
   return res.json();
 }
 
-// Shortlist is managed entirely client-side via ShortlistStore (localStorage).
-// No API calls needed — see stores/ShortlistStore.ts.
-
 export interface DomainEntry {
   domain: string;
   developerCount: number;

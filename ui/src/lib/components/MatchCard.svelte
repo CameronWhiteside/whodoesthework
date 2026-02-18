@@ -1,25 +1,14 @@
 <script lang="ts">
   import type { MatchResult } from '$lib/api';
-  import { shortlistStore } from '$lib/stores/ShortlistStore';
 
   export let match: MatchResult;
   export let rank: number;
 
   $: confidence = match.matchConfidence;
   $: confidenceClass = confidence >= 70 ? 'high' : confidence >= 40 ? 'mid' : 'low';
-
-  $: isShortlisted = $shortlistStore.some(m => m.username === match.username);
-
-  function toggleShortlist() {
-    if (isShortlisted) {
-      shortlistStore.remove(match.username);
-    } else {
-      shortlistStore.add(match);
-    }
-  }
 </script>
 
-<div class="card" class:shortlisted={isShortlisted}>
+<div class="card">
   <!-- Rank badge -->
   <div class="rank">
     <span class="rank-num">#{rank}</span>
@@ -86,10 +75,7 @@
         {/each}
       </div>
       <div class="actions">
-        <a href="/developer/{match.username}" class="view-link">View profile</a>
-        <button class="shortlist-btn" class:active={isShortlisted} on:click={toggleShortlist}>
-          {isShortlisted ? '✓ Shortlisted' : '+ Shortlist'}
-        </button>
+        <a href="/developer/{match.username}" class="view-link">View profile →</a>
       </div>
     </div>
   </div>
@@ -161,11 +147,4 @@
   .actions { display: flex; gap: 0.625rem; align-items: center; }
   .view-link { font-size: 0.8rem; color: #8a8070; text-decoration: none; }
   .view-link:hover { color: #2563eb; }
-  .shortlist-btn {
-    padding: 0.3rem 0.875rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
-    background: transparent; border: 1.5px solid #ddd8d0; color: #8a8070;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
-  }
-  .shortlist-btn:hover { border-color: #5b21b6; color: #5b21b6; }
-  .shortlist-btn.active { border-color: #5b21b6; color: #5b21b6; background: #ede9fe; }
 </style>

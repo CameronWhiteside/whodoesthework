@@ -75,9 +75,9 @@ export default {
         } else {
           // Short-lived stateful ops (ingest_developer, compute_scores, build_vectors)
           // → Durable Object.
-          const doName = 'username' in payload
-            ? (payload as { username: string }).username
-            : (payload as { developerId: string }).developerId;
+          const doName = payload.type === 'ingest_developer'
+            ? payload.username
+            : payload.developerId;
           const stub = env.INGESTION_DO.get(env.INGESTION_DO.idFromName(doName));
           await stub.fetch('http://do/process', {
             method: 'POST',
@@ -92,8 +92,9 @@ export default {
         // to prevent an immediate retry spiral.
         const errMsg = err instanceof Error ? err.message : String(err);
         const rateLimitMatch = errMsg.match(/Resets at (.+)$/);
-        if (rateLimitMatch) {
-          const resetMs = new Date(rateLimitMatch[1]).getTime();
+        const rateLimitReset = rateLimitMatch?.[1];
+        if (rateLimitReset) {
+          const resetMs = new Date(rateLimitReset).getTime();
           const delaySeconds = Math.max(60, Math.ceil((resetMs - Date.now()) / 1000) + 30);
           console.warn(`[queue] Rate limited, retrying in ${delaySeconds}s`);
           message.retry({ delaySeconds });

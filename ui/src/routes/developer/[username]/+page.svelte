@@ -2,7 +2,6 @@
   import { page } from '$app/stores';
   import { getDeveloper, type DeveloperProfile } from '$lib/api';
   import { pendingSearch } from '$lib/stores/SearchStore';
-  import { shortlistStore } from '$lib/stores/ShortlistStore';
   import ScoreBar from '$lib/components/ScoreBar.svelte';
   import { onMount } from 'svelte';
 
@@ -20,30 +19,7 @@
     }
   });
 
-  $: isShortlisted = profile
-    ? $shortlistStore.some(m => m.username === profile!.username)
-    : false;
 
-  function toggleShortlist() {
-    if (!profile) return;
-    if (isShortlisted) {
-      shortlistStore.remove(profile.username);
-    } else {
-      // Build a minimal MatchResult from profile data to add to shortlist
-      shortlistStore.add({
-        developerId: profile.id,
-        username: profile.username,
-        githubUrl: `https://github.com/${profile.username}`,
-        overallImpact: profile.overallImpact ?? 0,
-        codeQuality: profile.codeQuality ?? 0,
-        reviewQuality: profile.reviewQuality ?? 0,
-        topDomains: profile.domains.slice(0, 3).map(d => ({ domain: d.domain, score: d.score })),
-        topLanguages: [],
-        matchConfidence: 0,
-        whyMatched: '',
-      });
-    }
-  }
 </script>
 
 <svelte:head>
@@ -89,13 +65,6 @@
             <span class="impact-num">{profile.overallImpact?.toFixed(1) ?? '—'}</span>
             <span class="impact-label">OVERALL IMPACT</span>
           </div>
-          <button
-            class="shortlist-btn"
-            class:active={isShortlisted}
-            on:click={toggleShortlist}
-          >
-            {isShortlisted ? '✓ Shortlisted' : '+ Shortlist'}
-          </button>
         </div>
       </div>
 
@@ -297,29 +266,6 @@
     color: #8a8070;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-  }
-
-  .shortlist-btn {
-    padding: 0.4rem 1rem;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    background: transparent;
-    border: 1.5px solid #ddd8d0;
-    color: #8a8070;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
-  }
-
-  .shortlist-btn:hover {
-    border-color: #5b21b6;
-    color: #5b21b6;
-  }
-
-  .shortlist-btn.active {
-    border-color: #5b21b6;
-    color: #5b21b6;
-    background: #ede9fe;
   }
 
   .section {
