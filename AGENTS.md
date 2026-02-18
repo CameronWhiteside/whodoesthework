@@ -10,7 +10,7 @@ Entry point for all AI agents working on this repo. Read this before touching an
 
 **The demo** is a web UI where you describe your project ("building a real-time payment settlement system in Rust"), pick your stack, and get ranked developer matches with AI-generated "why matched" explanations backed by real commit evidence.
 
-**The eventual paid product** is the MCP server — a power-user API surface for AI agents and technical recruiting tools. The web UI exists to impress [Vamo.app](https://vamo.app) during a pitch. Don't gold-plate the web UI; make it feel remarkable and do the demo perfectly.
+**The eventual paid product** is the MCP server — a power-user API surface for AI agents and technical recruiting tools. The web UI is the public demo. Don't gold-plate the web UI; make it feel remarkable and do the demo perfectly.
 
 ---
 
@@ -93,7 +93,7 @@ Read the full spec before implementing. These summaries are orientation, not sub
 | **spec-06** | Vectorize semantic search | Embeds developer domain profile text. `executeSearch(env, { query, limit })` is the public interface. Query expansion happens in spec-09 before calling this. |
 | **spec-07** | MCP server (Agents SDK) | `authenticate()` checks Bearer token against `API_SECRET_KEY` env secret (constant-time). No D1 auth table. AI-generated `match_explanation` via Workers AI Promise.all(). |
 | **spec-08** | End-to-end integration + deploy | Wires all specs together. Seed D1 with real ingested developers before demo. |
-| **spec-09** | Vamo-style web UI + Hono REST API | Public endpoints (no auth). No shortlist — removed from scope. Query expansion via Workers AI before Vectorize. `GET /api/domains` powers live domain chips. `GET /admin/stats` powers live index counts. |
+| **spec-09** | Demo web UI + Hono REST API | Public endpoints (no auth). No shortlist — removed from scope. Query expansion via Workers AI before Vectorize. `GET /api/domains` powers live domain chips. `GET /admin/stats` powers live index counts. |
 
 Execution order: `spec-00 → spec-01 → [spec-02 + spec-03 + spec-04 in parallel] → spec-05 → spec-06 → spec-07 → spec-08 → spec-09`
 
@@ -376,7 +376,7 @@ No `PUBLIC_API_KEY` — all endpoints are public. No auth headers in the UI.
 
 ## UI philosophy — making the architecture visible
 
-This is a demo to impress a technical audience (Vamo.app team). The UI must do two things simultaneously: **feel like a premium product** and **make the underlying architecture obvious** to anyone watching.
+This is a demo for a technical audience. The UI must do two things simultaneously: **feel like a premium product** and **make the underlying architecture obvious** to anyone watching.
 
 ### The golden rule
 
@@ -470,7 +470,7 @@ This interface should feel like: a developer intelligence tool with editorial co
 
 ---
 
-## What the demo must prove to a Vamo.app viewer
+## What the demo must prove
 
 When the 5-minute demo ends, the viewer should walk away believing:
 

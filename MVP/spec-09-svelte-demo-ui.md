@@ -1,4 +1,4 @@
-# Spec 09 — Vamo-style Founder/Recruiter Web Product
+# Spec 09 — Demo Web Product (Founder/Recruiter UI)
 
 **Status:** Not Started
 **Blocks:** Nothing (presentation layer)
@@ -37,7 +37,7 @@ ui/
 │       └── components/
 │           ├── Hero.svelte
 │           ├── ProjectForm.svelte       ← 3-step wizard
-│           ├── MatchCard.svelte         ← Core Vamo-feel component
+│           ├── MatchCard.svelte         ← Core match result component
 │           └── ScoreBar.svelte
 ├── package.json
 └── svelte.config.js                     ← adapter-cloudflare
