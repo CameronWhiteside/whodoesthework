@@ -151,24 +151,66 @@ router.post('/api/search', async (c) => {
 
   const byId = new Map((rows.results ?? []).map((r) => [r.id, r]));
 
-  return c.json(
-    results.flatMap((r) => {
+  const enriched = await Promise.all(
+    results.map(async (r) => {
       const dev = byId.get(r.developerId);
-      if (!dev) return [];
-      return [{
+      if (!dev) return null;
+
+      const [domainRows, langRows] = await Promise.all([
+        c.env.DB.prepare(
+          'SELECT domain, score FROM developer_domains WHERE developer_id = ? ORDER BY score DESC LIMIT 3',
+        ).bind(dev.id).all<{ domain: string; score: number }>(),
+        c.env.DB.prepare(
+          'SELECT languages FROM contributions WHERE developer_id = ? LIMIT 200',
+        ).bind(dev.id).all<{ languages: string }>(),
+      ]);
+
+      const topDomains = (domainRows.results ?? []).map((d) => ({ domain: d.domain, score: d.score }));
+
+      const langCounts = new Map<string, number>();
+      for (const row of langRows.results ?? []) {
+        try {
+          const langs: string[] = JSON.parse(row.languages);
+          for (const lang of langs) {
+            if (!lang) continue;
+            langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1);
+          }
+        } catch {
+          // ignore bad JSON rows
+        }
+      }
+
+      const totalLang = [...langCounts.values()].reduce((a, b) => a + b, 0) || 1;
+      const topLanguages = [...langCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([language, count]) => ({
+          language,
+          percentage: Math.round((count / totalLang) * 100),
+        }));
+
+      const domainNames = topDomains.map((d) => d.domain).filter(Boolean);
+      const langNames = topLanguages.map((l) => l.language).filter(Boolean);
+      const whyMatched = domainNames.length || langNames.length
+        ? `Strong fit: evidence in ${domainNames.slice(0, 2).join(', ') || 'relevant domains'} (${langNames.slice(0, 2).join(', ') || 'multiple languages'}).`
+        : 'Strong fit: evidence-backed work similar to your query.';
+
+      return {
         developerId: dev.id,
         username: dev.username,
         githubUrl: `https://github.com/${dev.username}`,
         overallImpact: dev.overall_impact ?? 0,
         codeQuality: dev.code_quality ?? 0,
         reviewQuality: dev.review_quality ?? 0,
-        topDomains: [],
-        topLanguages: [],
+        topDomains,
+        topLanguages,
         matchConfidence: Math.round(r.similarity * 100),
-        whyMatched: 'Matched based on contribution history and domain overlap.',
-      }];
+        whyMatched,
+      };
     }),
   );
+
+  return c.json(enriched.filter(Boolean));
 });
 
 // ── GET /api/developers/:username ─────────────────────────────────────────────

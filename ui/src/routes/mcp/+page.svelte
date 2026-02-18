@@ -23,14 +23,11 @@
     <pre class="code-block">{`{
   "mcpServers": {
     "whodoesthework": {
-      "url": "https://whodoesthe.work/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_KEY"
-      }
+      "url": "https://whodoesthe.work/mcp"
     }
   }
 }`}</pre>
-    <p class="note">Works with Claude Desktop, Cursor, and any MCP-compatible client.</p>
+    <p class="note">Works with Claude Desktop, Cursor, and any MCP-compatible client. No auth required.</p>
   </section>
 
   <!-- Tools -->
@@ -182,19 +179,6 @@
   },
   "summary": "username_b leads on code quality; username_a on overall impact."
 }`}</pre>
-    </div>
-  </section>
-
-  <!-- Auth note -->
-  <section class="doc-section">
-    <h2>Authentication</h2>
-    <p>
-      All MCP tool calls require a bearer token in the <code>Authorization</code> header.
-      Tokens are issued per-tenant. To request access, contact the admin or
-      use the platform in UI mode — no token required for the web interface.
-    </p>
-    <div class="auth-box">
-      <code>Authorization: Bearer YOUR_KEY</code>
     </div>
   </section>
 
@@ -425,23 +409,6 @@
     line-height: 1.8;
   }
 
-  /* Auth box */
-  .auth-box {
-    background: #1a1714;
-    border: 1px solid #2d2925;
-    border-radius: 8px;
-    padding: 1rem 1.5rem;
-    display: inline-block;
-  }
-
-  .auth-box code {
-    background: none;
-    border: none;
-    padding: 0;
-    color: #b8ff57;
-    font-size: 0.875rem;
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-  }
 
   /* Try section */
   .try-section {

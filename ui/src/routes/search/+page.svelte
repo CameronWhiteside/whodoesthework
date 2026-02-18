@@ -1,17 +1,12 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import ProjectForm from '$lib/components/ProjectForm.svelte';
-  import { pendingSearch } from '$lib/stores/SearchStore';
-  import type { SearchRequest } from '$lib/api';
+  import { goto } from '$app/navigation';
 
-  // Pre-fill from ?q= param (set by Hero chip clicks)
-  const initialDescription = $page.url.searchParams.get('q') ?? '';
-
-  function handleSubmit(event: CustomEvent<SearchRequest>) {
-    pendingSearch.set(event.detail);
-    goto('/matches');
-  }
+  onMount(() => {
+    const q = $page.url.searchParams.get('q');
+    goto(q ? `/?q=${encodeURIComponent(q)}#find` : '/#find');
+  });
 </script>
 
 <svelte:head>
@@ -19,11 +14,7 @@
 </svelte:head>
 
 <div class="page">
-  <div class="header">
-    <h1>Find engineers</h1>
-    <p>Describe what you're building. We'll match you with developers who've shipped similar work.</p>
-  </div>
-  <ProjectForm {initialDescription} on:submit={handleSubmit} />
+  <p class="mono">Redirecting…</p>
 </div>
 
 <style>

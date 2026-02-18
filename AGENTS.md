@@ -70,7 +70,6 @@ npm run dev
 ### For production deploy
 ```bash
 npx wrangler secret put GITHUB_TOKEN
-npx wrangler secret put API_SECRET_KEY
 npm run deploy
 ```
 
@@ -91,7 +90,7 @@ Read the full spec before implementing. These summaries are orientation, not sub
 | **spec-04** | Workers AI classification (contribution type + domain tags) | `DOMAIN_TAXONOMY` is a hint vocabulary, not a constraint. Repo `topics` (from GitHub) are used directly — highest confidence signal, skip AI. Free-form kebab-case domain tags stored as-is. |
 | **spec-05** | Scoring engine (SEU/EffortH/QualityH model) | All coefficients in `constants.ts`. `computeSEU`, `computeEffortH`, `computeQualityH`, `computeCentralityProxy`, `computeContributionValue` are exported pure functions. Log-scale normalization throughout. |
 | **spec-06** | Vectorize semantic search | Embeds developer domain profile text. `executeSearch(env, { query, limit })` is the public interface. Query expansion happens in spec-09 before calling this. |
-| **spec-07** | MCP server (Agents SDK) | `authenticate()` checks Bearer token against `API_SECRET_KEY` env secret (constant-time). No D1 auth table. AI-generated `match_explanation` via Workers AI Promise.all(). |
+| **spec-07** | MCP server (Agents SDK) | Open — no auth. AI-generated `match_explanation` via Workers AI Promise.all(). |
 | **spec-08** | End-to-end integration + deploy | Wires all specs together. Seed D1 with real ingested developers before demo. |
 | **spec-09** | Demo web UI + Hono REST API | Public endpoints (no auth). No shortlist — removed from scope. Query expansion via Workers AI before Vectorize. `GET /api/domains` powers live domain chips. `GET /admin/stats` powers live index counts. |
 

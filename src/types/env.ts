@@ -9,6 +9,5 @@ export interface Env {
   AI: Ai;
   ASSETS: Fetcher;
   GITHUB_TOKEN: string;
-  API_SECRET_KEY: string;
   ENVIRONMENT: string;
 }

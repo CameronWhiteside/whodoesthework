@@ -1,7 +1,9 @@
 import { PUBLIC_API_URL } from '$env/static/public';
 
-// All endpoints are public — no auth header required.
-const headers = { 'Content-Type': 'application/json' };
+const GET_HEADERS = { Accept: 'application/json' };
+const POST_HEADERS = { Accept: 'application/json', 'Content-Type': 'application/json' };
+
+let domainsCache: Promise<DomainEntry[]> | null = null;
 
 export interface SearchRequest {
   description: string;
@@ -40,7 +42,7 @@ export interface DeveloperProfile {
 export async function searchMatches(req: SearchRequest): Promise<MatchResult[]> {
   const res = await fetch(`${PUBLIC_API_URL}/api/search`, {
     method: 'POST',
-    headers,
+    headers: POST_HEADERS,
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(`Search failed: ${res.status}`);
@@ -48,7 +50,7 @@ export async function searchMatches(req: SearchRequest): Promise<MatchResult[]> 
 }
 
 export async function getDeveloper(username: string): Promise<DeveloperProfile> {
-  const res = await fetch(`${PUBLIC_API_URL}/api/developers/${encodeURIComponent(username)}`, { headers });
+  const res = await fetch(`${PUBLIC_API_URL}/api/developers/${encodeURIComponent(username)}`, { headers: GET_HEADERS });
   if (!res.ok) throw new Error(`Not found: ${res.status}`);
   return res.json();
 }
@@ -66,9 +68,15 @@ export interface DomainEntry {
  * — call once on mount.
  */
 export async function getDomains(): Promise<DomainEntry[]> {
-  const res = await fetch(`${PUBLIC_API_URL}/api/domains`, { headers });
-  if (!res.ok) return []; // Non-fatal — form still works without chips
-  return res.json();
+  // Cache for the session; chips are stable enough for a demo.
+  if (!domainsCache) {
+    domainsCache = (async () => {
+      const res = await fetch(`${PUBLIC_API_URL}/api/domains`, { headers: GET_HEADERS });
+      if (!res.ok) return [];
+      return res.json();
+    })();
+  }
+  return domainsCache;
 }
 
 export interface PlatformStats {
@@ -81,7 +89,7 @@ export interface PlatformStats {
 
 export async function getStats(): Promise<PlatformStats | null> {
   try {
-    const res = await fetch(`${PUBLIC_API_URL}/admin/stats`, { headers });
+    const res = await fetch(`${PUBLIC_API_URL}/admin/stats`, { headers: GET_HEADERS });
     if (!res.ok) return null;
     return res.json();
   } catch {

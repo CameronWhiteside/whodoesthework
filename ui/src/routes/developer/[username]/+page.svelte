@@ -11,7 +11,12 @@
 
   onMount(async () => {
     try {
-      profile = await getDeveloper($page.params.username);
+      const username = $page.params.username;
+      if (!username) {
+        error = 'Missing username';
+        return;
+      }
+      profile = await getDeveloper(username);
     } catch (e) {
       error = String(e);
     } finally {
@@ -38,7 +43,7 @@
   {#if loading}
     <div class="loading">
       <div class="spinner" />
-      <p class="loading-text"><em>Loading profile…</em></p>
+      <p class="loading-text"><span class="accent-serif"><em>Loading scored profile…</em></span></p>
     </div>
   {:else if error}
     <div class="error-state">
@@ -63,34 +68,47 @@
         <div class="hero-right">
           <div class="impact-block">
             <span class="impact-num">{profile.overallImpact?.toFixed(1) ?? '—'}</span>
-            <span class="impact-label">OVERALL IMPACT</span>
+            <span class="impact-label">OVERALL SCORE</span>
           </div>
         </div>
       </div>
 
+      {#if $pendingSearch}
+        <div class="matched-because">
+          <div class="matched-eyebrow mono">MATCHED TO YOUR SEARCH</div>
+          <p class="matched-text">
+            <span class="role">{$pendingSearch.role || 'Engineer'}</span>
+            {#if $pendingSearch.stacks?.length}
+              <span class="sep">·</span>
+              <span class="stacks">{$pendingSearch.stacks.slice(0, 6).join(', ')}</span>
+            {/if}
+          </p>
+        </div>
+      {/if}
+
       <!-- Score breakdown -->
       <section class="section">
-        <h2 class="section-title">Score Breakdown</h2>
+        <h2 class="section-title">Score breakdown</h2>
         <div class="scores">
           <ScoreBar label="Code Quality" value={profile.codeQuality} />
-          <ScoreBar label="Review Quality" value={profile.reviewQuality} />
-          <ScoreBar label="Documentation" value={profile.documentationQuality} />
-          <ScoreBar label="Collaboration Breadth" value={profile.collaborationBreadth} />
+          <ScoreBar label="Review signal" value={profile.reviewQuality} />
+          <ScoreBar label="Docs signal" value={profile.documentationQuality} />
+          <ScoreBar label="Collaboration" value={profile.collaborationBreadth} />
           <ScoreBar label="Consistency" value={profile.consistencyScore} />
-          <ScoreBar label="Recent Activity" value={profile.recentActivityScore} />
+          <ScoreBar label="Recent activity" value={profile.recentActivityScore} />
         </div>
       </section>
 
       <!-- Domain expertise -->
       {#if profile.domains.length > 0}
         <section class="section">
-          <h2 class="section-title">Domain Expertise</h2>
+          <h2 class="section-title">Top domains (with evidence)</h2>
           <div class="domain-chips">
             {#each profile.domains.slice(0, 8) as d}
               <div class="domain-card">
                 <span class="domain-name">{d.domain}</span>
                 <span class="domain-score">{d.score.toFixed(0)}</span>
-                <span class="domain-count">{d.contributionCount} contributions</span>
+                <span class="domain-count">{d.contributionCount} scored contributions</span>
               </div>
             {/each}
           </div>
@@ -100,7 +118,7 @@
       <!-- Top languages from evidence repos -->
       {#if profile.domains.length > 0 && profile.domains.some(d => d.evidenceRepos)}
         <section class="section">
-          <h2 class="section-title">Evidence Repositories</h2>
+          <h2 class="section-title">Evidence repos</h2>
           <div class="evidence-list">
             {#each profile.domains.slice(0, 5) as d}
               {#if d.evidenceRepos}
@@ -279,6 +297,44 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0 0 1rem;
+  }
+
+  .matched-because {
+    background: #ffffff;
+    border: 1.5px solid #ddd8d0;
+    border-left: 3px solid #b8ff57;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .matched-eyebrow {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #1a3300;
+    margin-bottom: 0.35rem;
+  }
+
+  .matched-text {
+    margin: 0;
+    color: #3d3830;
+    line-height: 1.55;
+  }
+
+  .matched-text .role {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .matched-text .sep {
+    color: #ddd8d0;
+    margin: 0 0.5rem;
+  }
+
+  .matched-text .stacks {
+    color: #8a8070;
   }
 
   .scores {

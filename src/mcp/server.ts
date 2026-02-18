@@ -13,7 +13,6 @@ import { Agent } from '@cloudflare/agents';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
-import { authenticate, unauthorizedResponse } from './auth';
 import { searchDevelopers } from './tools/search-developers';
 import { getDeveloperProfile } from './tools/get-developer-profile';
 import { compareDevelopers } from './tools/compare-developers';
@@ -125,19 +124,9 @@ export class WhodoestheworkMCP extends Agent<Env> {
 
   /**
    * Handle every incoming HTTP request.
-   *
-   * Auth check happens here — before the MCP transport sees the request.
    * A new stateless transport + McpServer is created per request.
    */
   async onRequest(request: Request): Promise<Response> {
-    // ------------------------------------------------------------------
-    // Bearer token authentication — constant-time comparison via auth.ts
-    // ------------------------------------------------------------------
-    const authResult = await authenticate(request, this.env.API_SECRET_KEY);
-    if (!authResult.ok) {
-      return unauthorizedResponse(authResult.error);
-    }
-
     // ------------------------------------------------------------------
     // Wire up a fresh stateless MCP transport for this request
     // ------------------------------------------------------------------

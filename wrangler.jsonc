@@ -83,7 +83,6 @@
 
   // Secrets (set via `wrangler secret put`):
   //   GITHUB_TOKEN      — GitHub Personal Access Token (read:user, read:repo)
-  //   API_SECRET_KEY    — bearer token for MCP server auth
 
   "vars": {
     "ENVIRONMENT": "production"
