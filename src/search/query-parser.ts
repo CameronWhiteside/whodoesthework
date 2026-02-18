@@ -138,9 +138,10 @@ export async function executeSearch(
 ): Promise<{ developerId: string; similarity: number }[]> {
   const searchText = buildSearchText(input);
 
-  // 1. Semantic vector search — over-fetch so hybrid rescoring has headroom.
+  // 1. Semantic vector search — Vectorize caps topK at 50 with returnMetadata='all'.
+  //    50 is enough headroom: hybrid rescoring reorders them before the final slice.
   const vectorResults = await searchDevelopersByDomain(
-    env.AI, env.VECTOR_INDEX, searchText, Math.max(50, (input.limit ?? 10) * 8),
+    env.AI, env.VECTOR_INDEX, searchText, 50,
   );
 
   const db = createDB(env.DB);
