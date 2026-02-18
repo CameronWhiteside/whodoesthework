@@ -161,6 +161,9 @@
     font-weight: 600;
     text-decoration: none;
     cursor: pointer;
+    font-family: inherit;
+    appearance: none;
+    line-height: 1.1;
   }
   .why-matched {
     padding: 0.625rem 0.875rem;
@@ -218,6 +221,9 @@
     color: var(--color-muted);
     text-decoration: none;
     cursor: pointer;
+    font-family: inherit;
+    appearance: none;
+    line-height: 1.1;
   }
   .actions { display: flex; gap: 0.625rem; align-items: center; }
   .view-link { font-size: 0.8rem; color: var(--color-link); text-decoration: none; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
