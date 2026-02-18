@@ -1,24 +1,35 @@
 <script lang="ts">
   import type { MatchResult } from '$lib/api';
-  import { selectionHandles } from '$lib/actions/selectionHandles';
+  import { goto } from '$app/navigation';
 
   export let match: MatchResult;
   export let rank: number;
 
   $: confidence = match.matchConfidence;
   $: confidenceClass = confidence >= 70 ? 'high' : confidence >= 40 ? 'mid' : 'low';
+
+  $: hasScore = match.overallImpact > 0;
+  $: impactText = hasScore ? match.overallImpact.toFixed(0) : '—';
+  $: impactLabel = hasScore ? 'Impact' : 'Indexing';
+
+  function openProfile() {
+    goto(`/developer/${match.username}`);
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openProfile();
+    }
+  }
 </script>
 
-<div class="card" use:selectionHandles>
-  <!-- Rank badge -->
-  <div class="rank">
-    <span class="rank-num">#{rank}</span>
-  </div>
-
+<div class="card" role="link" tabindex="0" on:click={openProfile} on:keydown={onKeydown}>
   <div class="body">
     <!-- Top row -->
     <div class="top-row">
       <div class="name-block">
+        <span class="rank-badge mono">#{rank}</span>
         <span class="username">@{match.username}</span>
       </div>
       <div class="badges">
@@ -26,8 +37,8 @@
           {confidence}% fit
         </span>
         <div class="impact-block">
-          <span class="impact">{match.overallImpact.toFixed(0)}</span>
-          <span class="impact-label">Work</span>
+          <span class="impact">{impactText}</span>
+          <span class="impact-label">{impactLabel}</span>
         </div>
       </div>
     </div>
@@ -36,7 +47,11 @@
     {#if match.topDomains.length > 0}
       <div class="domains">
         {#each match.topDomains.slice(0, 3) as d}
-          <a class="domain-chip" href={`/?q=${encodeURIComponent(d.domain)}#find`}>{d.domain}</a>
+          <button
+            type="button"
+            class="domain-chip"
+            on:click|stopPropagation={() => goto(`/?q=${encodeURIComponent(d.domain)}#find`)}
+          >{d.domain}</button>
         {/each}
       </div>
     {/if}
@@ -49,38 +64,23 @@
       </div>
     {/if}
 
-    <!-- Score mini-bars -->
-    <div class="score-row">
-      <div class="score-item">
-        <span class="score-label">Code quality</span>
-        <div class="mini-bar-track">
-          <div
-            class="mini-bar-fill"
-            style="width: {match.codeQuality}%"
-          />
-        </div>
-      </div>
-      <div class="score-item">
-        <span class="score-label">Review quality</span>
-        <div class="mini-bar-track">
-          <div
-            class="mini-bar-fill"
-            style="width: {match.reviewQuality}%"
-          />
-        </div>
-      </div>
+    <div class="dims mono" aria-label="Score dimensions">
+      <span class="dim"><span class="k">CODE</span> <span class="v">{match.codeQuality.toFixed(0)}</span></span>
+      <span class="dim"><span class="k">REVIEW</span> <span class="v">{match.reviewQuality.toFixed(0)}</span></span>
     </div>
 
     <!-- Footer -->
     <div class="footer">
       <div class="langs">
         {#each match.topLanguages.slice(0, 3) as l}
-          <a class="lang-chip" href={`/?q=${encodeURIComponent(l.language)}#find`}>{l.language}</a>
+          <button
+            type="button"
+            class="lang-chip"
+            on:click|stopPropagation={() => goto(`/?q=${encodeURIComponent(l.language)}#find`)}
+          >{l.language}</button>
         {/each}
       </div>
-      <div class="actions">
-        <a href="/developer/{match.username}" class="view-link">Open profile →</a>
-      </div>
+      <div class="actions"><span class="view-link">Open profile →</span></div>
     </div>
   </div>
 </div>
@@ -93,6 +93,7 @@
     border-radius: var(--r-2);
     overflow: visible;
     transition: border-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+    cursor: pointer;
   }
   .card:hover {
     border-color: var(--color-border-strong);
@@ -101,24 +102,24 @@
   .card:focus-within {
     border-color: var(--color-brand);
   }
-  .rank {
-    display: flex; align-items: center; justify-content: center;
-    min-width: 54px;
-    background: rgba(255,255,255,0.55);
-    border-right: 1px solid var(--color-divider);
-    flex-shrink: 0;
+  .card:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 3px;
   }
-  .rank-num {
-    writing-mode: vertical-lr; transform: rotate(180deg);
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--color-muted);
+
+  .body { flex: 1; padding: 0.75rem 0.9rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+
+  .name-block { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+  .rank-badge {
+    font-size: 0.7rem;
+    font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
+    color: var(--color-muted);
   }
-  .body { flex: 1; padding: 1.125rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
-  .top-row { display: flex; justify-content: space-between; align-items: flex-start; }
-  .username { font-size: 1.05rem; font-weight: 700; color: var(--color-text); }
+
+  .username { font-size: 0.95rem; font-weight: 800; color: var(--color-text); }
   .badges { display: flex; align-items: center; gap: 0.625rem; }
   .confidence-badge {
     font-size: 0.75rem; font-weight: 700;
@@ -135,7 +136,7 @@
     gap: 0.15rem;
   }
   .impact {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 900;
     color: var(--color-text);
     line-height: 1;
@@ -155,10 +156,11 @@
     background: var(--color-category);
     border: var(--b-1) solid var(--color-category-border);
     border-radius: 999px;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--color-on-category);
     font-weight: 600;
     text-decoration: none;
+    cursor: pointer;
   }
   .why-matched {
     padding: 0.625rem 0.875rem;
@@ -171,11 +173,39 @@
     letter-spacing: 0.1em; text-transform: uppercase; display: block; margin-bottom: 0.25rem;
   }
   .why-text { font-size: 0.95rem; color: var(--color-text-2); line-height: 1.55; margin: 0; }
-  .score-row { display: flex; gap: 1.5rem; }
-  .score-item { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; }
-  .score-label { font-size: 0.75rem; color: var(--color-muted); }
-  .mini-bar-track { background: rgba(11,10,8,0.08); border-radius: 3px; height: 5px; overflow: hidden; }
-  .mini-bar-fill { height: 100%; border-radius: 3px; background: var(--color-accent); transition: width 0.4s ease; }
+
+  .why-text {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .dims {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .dim {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: baseline;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(184,176,165,0.55);
+    background: rgba(255,255,255,0.6);
+  }
+
+  .dim .k { color: var(--color-muted); }
+  .dim .v { color: var(--color-text); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 0; }
   .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem; }
   .langs { display: flex; gap: 0.375rem; flex-wrap: wrap; }
   .lang-chip {
@@ -187,8 +217,8 @@
     font-size: 0.75rem;
     color: var(--color-muted);
     text-decoration: none;
+    cursor: pointer;
   }
   .actions { display: flex; gap: 0.625rem; align-items: center; }
-  .view-link { font-size: 0.9rem; color: var(--color-link); text-decoration: none; font-weight: 700; }
-  .view-link:hover { color: var(--color-link-hover); }
+  .view-link { font-size: 0.8rem; color: var(--color-link); text-decoration: none; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 </style>

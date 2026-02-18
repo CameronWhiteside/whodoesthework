@@ -392,8 +392,8 @@
   .cardlist {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-4);
-    margin-top: var(--sp-4);
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
     overflow: auto;
     padding-right: 0.25rem;
     max-height: min(420px, 46vh);
